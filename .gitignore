@@ -1,0 +1,95 @@
+# .gitignore for a Go project (boundary-bytes-go-backend)
+#
+# Adjust entries as needed for your workflow (e.g. uncomment /vendor/ if you
+# vendor dependencies and want to track them).
+
+#####################
+# Build / output
+#####################
+# Local build outputs / binaries
+/bin/
+/out/
+/dist/
+
+# Common binary file extensions
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+#####################
+# Coverage / profiling
+#####################
+coverage.out
+cover.out
+*.coverprofile
+*.cov
+*.out
+
+#####################
+# Dependency directories
+#####################
+# Uncomment if you vendor dependencies and want to ignore the vendor dir
+# /vendor/
+
+#####################
+# IDEs / editors
+#####################
+# JetBrains IDEs (GoLand, IntelliJ)
+.idea/
+# VS Code
+.vscode/
+# Sublime
+*.sublime-project
+*.sublime-workspace
+# Eclipse/Java
+*.project
+*.classpath
+*.settings/
+# IntelliJ module files
+*.iml
+
+# Editor temp / swap files
+*~
+*.swp
+*.tmp
+*.bak
+
+#####################
+# OS files
+#####################
+.DS_Store
+Thumbs.db
+
+#####################
+# Environment / secrets
+#####################
+.env
+.env.local
+.env.*.local
+.envrc
+
+#####################
+# Logs / databases / misc
+#####################
+*.log
+*.sqlite
+*.db
+*.sqlite3
+
+#####################
+# Generated files
+#####################
+# Add generated code patterns you don't want tracked, e.g. protobuf output:
+# *.pb.go
+
+#####################
+# Notes
+#####################
+# - Keep go.mod and go.sum tracked in the repo (do not ignore them).
+# - If you've already committed build artifacts (e.g. bin/api), removing them
+#   from the repo requires deleting the tracked files and committing the change:
+#     git rm --cached <file>
+#   then commit.
