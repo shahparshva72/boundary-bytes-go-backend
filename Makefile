@@ -6,6 +6,9 @@ DATABASE_URL ?= $(shell echo $$DATABASE_URL)
 run:
 	go run cmd/api/main.go
 
+watch:
+	air
+
 build:
 	go build -o bin/api cmd/api/main.go
 

@@ -93,3 +93,5 @@ Thumbs.db
 #   from the repo requires deleting the tracked files and committing the change:
 #     git rm --cached <file>
 #   then commit.
+
+tmp/
