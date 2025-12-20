@@ -27,6 +27,9 @@ func NewServer(db database.Service) *Server {
 
 	r.Get("/health", handlers.HealthCheck)
 	r.Get("/db-health", handlers.DBHealthCheck(db))
+	r.Get("/api/players/batters", handlers.GetBatters(db))
+	r.Get("/api/players/bowlers", handlers.GetBowlers(db))
+	r.Get("/api/stats/matchup", handlers.GetMatchup(db))
 
 	return &Server{
 		Router: r,

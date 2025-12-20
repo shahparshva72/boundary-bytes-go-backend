@@ -7,12 +7,17 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
 type Service interface {
 	Health() map[string]string
 	Close() error
 	GetDB() *sql.DB
+	GetBattersByLeague(ctx context.Context, league string) ([]string, error)
+	GetBowlersByLeague(ctx context.Context, league string) ([]string, error)
+	GetAllLeagues(ctx context.Context) ([]string, error)
+	GetMatchupStats(ctx context.Context, league, batter, bowler string) (*models.MatchupData, error)
 }
 
 type service struct {
