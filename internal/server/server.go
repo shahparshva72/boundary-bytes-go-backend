@@ -30,6 +30,8 @@ func NewServer(db database.Service) *Server {
 	r.Get("/api/players/batters", handlers.GetBatters(db))
 	r.Get("/api/players/bowlers", handlers.GetBowlers(db))
 	r.Get("/api/stats/matchup", handlers.GetMatchup(db))
+	r.Get("/api/stats/leading-wicket-takers", handlers.GetLeadingWicketTakers(db))
+	r.Get("/api/stats/leading-run-scorers", handlers.GetLeadingRunScorers(db))
 
 	return &Server{
 		Router: r,

@@ -18,6 +18,8 @@ type Service interface {
 	GetBowlersByLeague(ctx context.Context, league string) ([]string, error)
 	GetAllLeagues(ctx context.Context) ([]string, error)
 	GetMatchupStats(ctx context.Context, league, batter, bowler string) (*models.MatchupData, error)
+	GetLeadingWicketTakers(ctx context.Context, league string, page, limit int) ([]models.WicketTaker, int, error)
+	GetLeadingRunScorers(ctx context.Context, league string, page, limit int) ([]models.RunScorer, int, error)
 }
 
 type service struct {
