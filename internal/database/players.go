@@ -11,7 +11,7 @@ func (s *service) GetBattersByLeague(ctx context.Context, league string) ([]stri
 		SELECT DISTINCT d.striker
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
-		WHERE m.league = $1
+		WHERE m.league = $1 AND d.innings <= 2
 		ORDER BY d.striker;
 	`
 
@@ -42,7 +42,7 @@ func (s *service) GetBowlersByLeague(ctx context.Context, league string) ([]stri
 		SELECT DISTINCT d.bowler
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
-		WHERE m.league = $1
+		WHERE m.league = $1 AND d.innings <= 2
 		ORDER BY d.bowler;
 	`
 
@@ -135,7 +135,7 @@ func (s *service) GetLeadingWicketTakers(ctx context.Context, league string, pag
 				COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)::int as ballsBowled
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
-			WHERE m.league = $1
+			WHERE m.league = $1 AND d.innings <= 2
 			GROUP BY d.bowler
 		)
 		SELECT
