@@ -33,10 +33,10 @@ type MatchupMetadata struct {
 }
 
 type LeadingWicketTakersResponse struct {
-	League     string                    `json:"league"`
-	Pagination Pagination                `json:"pagination"`
+	League     string                      `json:"league"`
+	Pagination Pagination                  `json:"pagination"`
 	Metadata   LeadingWicketTakersMetadata `json:"metadata"`
-	Data       []WicketTaker             `json:"data"`
+	Data       []WicketTaker               `json:"data"`
 }
 
 type Pagination struct {
@@ -62,10 +62,10 @@ type WicketTaker struct {
 }
 
 type LeadingRunScorersResponse struct {
-	Data       []RunScorer                 `json:"data"`
-	League     string                      `json:"league"`
-	Pagination Pagination                  `json:"pagination"`
-	Metadata   LeadingRunScorersMetadata   `json:"metadata"`
+	Data       []RunScorer               `json:"data"`
+	League     string                    `json:"league"`
+	Pagination Pagination                `json:"pagination"`
+	Metadata   LeadingRunScorersMetadata `json:"metadata"`
 }
 
 type LeadingRunScorersMetadata struct {
@@ -82,4 +82,31 @@ type RunScorer struct {
 	Fours             int     `json:"fours"`
 	Sixes             int     `json:"sixes"`
 	DotBallPercentage float64 `json:"dotBallPercentage"`
+}
+
+type NewsAPIResponse struct {
+	Success bool        `json:"success"`
+	Data    NewsAPIData `json:"data"`
+}
+
+type NewsAPIData struct {
+	Title       string            `json:"title"`
+	Description string            `json:"description"`
+	Link        string            `json:"link"`
+	Items       []RSSItemResponse `json:"items"`
+}
+
+type RSSItemResponse struct {
+	Title          *string    `json:"title"`
+	Link           *string    `json:"link"`
+	PubDate        *string    `json:"pubDate"`
+	ContentSnippet *string    `json:"contentSnippet"`
+	Content        *string    `json:"content"`
+	GUID           *string    `json:"guid"`
+	Enclosure      *Enclosure `json:"enclosure,omitempty"`
+	Image          *string    `json:"image,omitempty"`
+}
+
+type Enclosure struct {
+	URL *string `json:"url"`
 }
