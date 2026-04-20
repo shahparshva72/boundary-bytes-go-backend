@@ -26,6 +26,8 @@ type Service interface {
 	GetRunRateTrend(ctx context.Context, league string, team *string) ([]models.RunRateTrendItem, error)
 	GetTeamRunRateProgression(ctx context.Context, league, team, season string) ([]models.TeamRunRateProgressionPoint, models.TeamRunRateProgressionMetadata, error)
 	GetPlayerCompare(ctx context.Context, league string, players []string, seasons []string, team *string, statType string) ([]models.PlayerComparePlayer, error)
+	GetStatExplorerOptions(ctx context.Context, league, reportType string) (models.StatExplorerFilterOptions, error)
+	RunStatExplorer(ctx context.Context, league string, request models.StatExplorerRunRequest) (models.StatExplorerRunResult, error)
 	GetBowlingWicketTypes(ctx context.Context, league string, page, limit int) ([]models.BowlingWicketTypesItem, int, error)
 	GetMultiMatchup(ctx context.Context, league, player string, opponents []string, mode string) ([]models.MultiMatchupItem, error)
 	GetPlayerProgression(ctx context.Context, league, player string, innings *int) ([]models.PlayerProgressionPoint, models.PlayerProgressionMetadata, error)

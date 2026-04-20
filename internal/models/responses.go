@@ -189,6 +189,115 @@ type PlayerCompareResponse struct {
 	Metadata PlayerCompareMetadata `json:"metadata"`
 }
 
+type StatExplorerFilterOptions struct {
+	Teams               []string `json:"teams"`
+	Opposition          []string `json:"opposition"`
+	Seasons             []string `json:"seasons"`
+	Venues              []string `json:"venues"`
+	Cities              []string `json:"cities"`
+	TossWinners         []string `json:"tossWinners"`
+	TossDecisions       []string `json:"tossDecisions"`
+	Innings             []int    `json:"innings"`
+	AvailableMetrics    []string `json:"availableMetrics"`
+	AvailableDimensions []string `json:"availableDimensions"`
+	BattingHands        []string `json:"battingHands"`
+	BowlingTypes        []string `json:"bowlingTypes"`
+	BowlingSubTypes     []string `json:"bowlingSubTypes"`
+	PlayingRoles        []string `json:"playingRoles"`
+	PlayingRoleDetails  []string `json:"playingRoleDetails"`
+}
+
+type StatExplorerOptionsMetadata struct {
+	ReportType string `json:"reportType"`
+}
+
+type StatExplorerOptionsResponse struct {
+	Options  StatExplorerFilterOptions   `json:"options"`
+	League   string                      `json:"league"`
+	Metadata StatExplorerOptionsMetadata `json:"metadata"`
+}
+
+type StatExplorerSort struct {
+	Key       string `json:"key"`
+	Direction string `json:"direction"`
+}
+
+type StatExplorerRunFilters struct {
+	Teams                  []string `json:"teams,omitempty"`
+	Opposition             []string `json:"opposition,omitempty"`
+	Seasons                []string `json:"seasons,omitempty"`
+	DateFrom               *string  `json:"dateFrom,omitempty"`
+	DateTo                 *string  `json:"dateTo,omitempty"`
+	Venues                 []string `json:"venues,omitempty"`
+	Cities                 []string `json:"cities,omitempty"`
+	TossWinners            []string `json:"tossWinners,omitempty"`
+	TossDecisions          []string `json:"tossDecisions,omitempty"`
+	Innings                []int    `json:"innings,omitempty"`
+	OverFrom               *int     `json:"overFrom,omitempty"`
+	OverTo                 *int     `json:"overTo,omitempty"`
+	Phase                  *string  `json:"phase,omitempty"`
+	ResultFilter           *string  `json:"resultFilter,omitempty"`
+	MinRuns                *int     `json:"minRuns,omitempty"`
+	MaxRuns                *int     `json:"maxRuns,omitempty"`
+	MinBalls               *int     `json:"minBalls,omitempty"`
+	MaxBalls               *int     `json:"maxBalls,omitempty"`
+	MinWickets             *int     `json:"minWickets,omitempty"`
+	MaxWickets             *int     `json:"maxWickets,omitempty"`
+	BattingHand            *string  `json:"battingHand,omitempty"`
+	BowlingType            *string  `json:"bowlingType,omitempty"`
+	BowlingSubType         []string `json:"bowlingSubType,omitempty"`
+	OpponentBattingHand    *string  `json:"opponentBattingHand,omitempty"`
+	OpponentBowlingType    *string  `json:"opponentBowlingType,omitempty"`
+	OpponentBowlingSubType []string `json:"opponentBowlingSubType,omitempty"`
+	PlayingRole            *string  `json:"playingRole,omitempty"`
+	PlayingRoleDetail      *string  `json:"playingRoleDetail,omitempty"`
+}
+
+type StatExplorerRunPagination struct {
+	Page     int `json:"page"`
+	PageSize int `json:"pageSize"`
+}
+
+type StatExplorerRunRequest struct {
+	ReportType string                    `json:"reportType"`
+	Dimensions []string                  `json:"dimensions"`
+	Metrics    []string                  `json:"metrics"`
+	Filters    StatExplorerRunFilters    `json:"filters"`
+	Sort       *StatExplorerSort         `json:"sort,omitempty"`
+	Pagination StatExplorerRunPagination `json:"pagination"`
+}
+
+type StatExplorerColumn struct {
+	Key       string `json:"key"`
+	Label     string `json:"label"`
+	IsNumeric bool   `json:"isNumeric"`
+}
+
+type StatExplorerRunResult struct {
+	Data      []map[string]interface{} `json:"data"`
+	Columns   []StatExplorerColumn     `json:"columns"`
+	TotalRows int                      `json:"totalRows"`
+}
+
+type StatExplorerRunMetadata struct {
+	AvailableLeagues []string               `json:"availableLeagues"`
+	ReportType       string                 `json:"reportType"`
+	Filters          StatExplorerRunFilters `json:"filters"`
+	Dimensions       []string               `json:"dimensions"`
+	Metrics          []string               `json:"metrics"`
+}
+
+type StatExplorerRunResponse struct {
+	Data       []map[string]interface{} `json:"data"`
+	Columns    []StatExplorerColumn     `json:"columns"`
+	TotalRows  int                      `json:"totalRows"`
+	Page       int                      `json:"page"`
+	PageSize   int                      `json:"pageSize"`
+	TotalPages int                      `json:"totalPages"`
+	League     string                   `json:"league"`
+	Metadata   StatExplorerRunMetadata  `json:"metadata"`
+}
+
 type NewsAPIResponse struct {
 	Success bool        `json:"success"`
 	Data    NewsAPIData `json:"data"`

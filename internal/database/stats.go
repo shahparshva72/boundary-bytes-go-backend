@@ -509,6 +509,102 @@ func (s *service) GetPlayerCompare(
 	return comparedPlayers, nil
 }
 
+func (s *service) GetStatExplorerOptions(
+	ctx context.Context,
+	league string,
+	reportType string,
+) (models.StatExplorerFilterOptions, error) {
+	teams, err := s.queryStringList(ctx, fmt.Sprintf(`
+		SELECT DISTINCT %s AS team
+		FROM wpl_delivery d
+		JOIN wpl_match m ON d.match_id = m.match_id
+		WHERE m.league = $1
+		ORDER BY team;
+	`, standardizedBattingTeamSQL), league)
+	if err != nil {
+		return models.StatExplorerFilterOptions{}, err
+	}
+
+	seasons, err := s.queryStringList(ctx, `
+		SELECT DISTINCT season
+		FROM wpl_match
+		WHERE league = $1
+		ORDER BY season DESC;
+	`, league)
+	if err != nil {
+		return models.StatExplorerFilterOptions{}, err
+	}
+
+	venues, err := s.queryStringList(ctx, `
+		SELECT DISTINCT venue
+		FROM wpl_match
+		WHERE league = $1
+		ORDER BY venue;
+	`, league)
+	if err != nil {
+		return models.StatExplorerFilterOptions{}, err
+	}
+
+	cities, err := s.queryStringList(ctx, `
+		SELECT DISTINCT city
+		FROM wpl_match_info
+		WHERE league = $1
+		ORDER BY city;
+	`, league)
+	if err != nil {
+		return models.StatExplorerFilterOptions{}, err
+	}
+
+	tossWinners, err := s.queryStringList(ctx, `
+		SELECT DISTINCT toss_winner
+		FROM wpl_match_info
+		WHERE league = $1
+		ORDER BY toss_winner;
+	`, league)
+	if err != nil {
+		return models.StatExplorerFilterOptions{}, err
+	}
+
+	return models.StatExplorerFilterOptions{
+		Teams:               teams,
+		Opposition:          teams,
+		Seasons:             seasons,
+		Venues:              venues,
+		Cities:              cities,
+		TossWinners:         tossWinners,
+		TossDecisions:       []string{"bat", "field"},
+		Innings:             []int{1, 2},
+		AvailableMetrics:    statExplorerAllowedMetrics(reportType),
+		AvailableDimensions: statExplorerAllowedDimensions(reportType),
+		BattingHands:        []string{"right", "left"},
+		BowlingTypes:        []string{"pace", "spin"},
+		BowlingSubTypes: []string{
+			"fast",
+			"fast-medium",
+			"medium-fast",
+			"medium",
+			"offbreak",
+			"legbreak",
+			"left-arm-orthodox",
+			"left-arm-wrist-spin",
+			"slow",
+		},
+		PlayingRoles: []string{"batter", "bowler", "allrounder", "wicketkeeper"},
+		PlayingRoleDetails: []string{
+			"opening_batter",
+			"top_order_batter",
+			"middle_order_batter",
+			"batter",
+			"batting_allrounder",
+			"bowling_allrounder",
+			"allrounder",
+			"bowler",
+			"wicketkeeper_batter",
+			"wicketkeeper",
+		},
+	}, nil
+}
+
 func (s *service) getPlayerCompareBatting(
 	ctx context.Context,
 	league string,
@@ -646,6 +742,31 @@ func (s *service) getPlayerCompareBatting(
 	}
 
 	return stats, nil
+}
+
+func (s *service) queryStringList(ctx context.Context, query string, args ...interface{}) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	values := []string{}
+	for rows.Next() {
+		var value sql.NullString
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		if value.Valid {
+			values = append(values, value.String)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return values, nil
 }
 
 func (s *service) getPlayerCompareBowling(
@@ -1166,6 +1287,53 @@ func overFromBall(ball string, allowed map[int]bool) bool {
 		return false
 	}
 	return allowed[over+1]
+}
+
+func statExplorerAllowedDimensions(reportType string) []string {
+	switch reportType {
+	case "batting", "bowling":
+		return []string{
+			"season",
+			"player",
+			"team",
+			"opposition",
+			"venue",
+			"city",
+			"tossWinner",
+			"tossDecision",
+			"result",
+			"date",
+			"innings",
+			"battingHand",
+			"bowlingType",
+			"bowlingSubType",
+			"opponentBattingHand",
+			"opponentBowlingType",
+			"opponentBowlingSubType",
+			"playingRole",
+		}
+	case "team":
+		return []string{"season", "team", "venue", "city", "tossWinner", "tossDecision", "result", "date"}
+	case "match":
+		return []string{"season", "team", "opposition", "venue", "city", "tossWinner", "tossDecision", "result", "date", "innings"}
+	default:
+		return []string{}
+	}
+}
+
+func statExplorerAllowedMetrics(reportType string) []string {
+	switch reportType {
+	case "batting":
+		return []string{"runs", "ballsFaced", "innings", "notOuts", "highestScore", "fours", "sixes", "fifties", "hundreds", "strikeRate", "average", "dismissals", "dotBalls"}
+	case "bowling":
+		return []string{"wickets", "ballsBowled", "runsConceded", "innings", "economyRate", "bowlingAverage", "bowlingStrikeRate", "fourWickets", "fiveWickets", "dotBalls"}
+	case "team":
+		return []string{"matchesPlayed", "wins", "losses", "winPct", "winsBattingFirst", "winsBattingSecond"}
+	case "match":
+		return []string{"matches", "runs", "wickets", "ballsFaced", "ballsBowled", "economyRate", "strikeRate"}
+	default:
+		return []string{}
+	}
 }
 
 func calculateAdvancedBatterStats(deliveries []deliveryRow, player string) models.AdvancedStatsBatterData {

@@ -8,9 +8,9 @@ Based on a direct comparison between:
 ## Summary
 
 - Next.js exposes 26 method/path pairs across 24 route files.
-- Go currently registers 20 matching API routes.
-- 20 endpoints are now migrated in Go.
-- 6 method/path pairs are still missing in Go.
+- Go currently registers 22 matching API routes.
+- 22 endpoints are now migrated in Go.
+- 4 method/path pairs are still missing in Go.
 
 ## Recommended Sequential Order
 
@@ -48,6 +48,8 @@ Status: complete.
 
 Reason: stat explorer is a subsystem, not just a single query. It depends on request validation, dynamic query building, and player-style lookups.
 
+Status: stat explorer endpoints are complete. Full quality still depends on `player_style` data being backfilled in environments where style filters/dimensions are used.
+
 ### Phase 4: Add AI Feedback Endpoints
 
 1. Verify `ai_chat_request` migration is applied in the Go database.
@@ -84,20 +86,14 @@ Reason: this has the most external dependencies, security constraints, and movin
 - [x] `GET /api/stats/multi-matchup`
 - [x] `GET /api/stats/player-compare`
 - [x] `GET /api/stats/player-progression`
+- [x] `GET /api/stats/stat-explorer/options`
+- [x] `POST /api/stats/stat-explorer/run`
 - [x] `GET /api/stats/advanced`
 - [x] `GET /api/stats/fall-of-wickets/{matchId}`
 - [x] `GET /api/stats/leading-wicket-takers`
 - [x] `GET /api/stats/leading-run-scorers`
 
 ## Remaining Unmigrated Endpoints
-
-### Medium Effort
-
-- [ ] `GET /api/stats/stat-explorer/options`
-  Depends on the stat explorer contract/registry plus filter-option queries for teams, seasons, venues, cities, toss winners, and static enums.
-
-- [ ] `POST /api/stats/stat-explorer/run`
-  Depends on the full stat explorer request schema, dimension/metric validation, dynamic SQL builder, pagination, and result-column metadata.
 
 ### Higher Effort
 

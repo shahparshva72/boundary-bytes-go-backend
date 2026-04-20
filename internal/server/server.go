@@ -42,6 +42,8 @@ func NewServer(db database.Service) *Server {
 	r.Get("/api/stats/multi-matchup", handlers.GetMultiMatchup(db))
 	r.Get("/api/stats/player-compare", handlers.GetPlayerCompare(db))
 	r.Get("/api/stats/player-progression", handlers.GetPlayerProgression(db))
+	r.Get("/api/stats/stat-explorer/options", handlers.GetStatExplorerOptions(db))
+	r.Post("/api/stats/stat-explorer/run", handlers.RunStatExplorer(db))
 	r.Get("/api/stats/advanced", handlers.GetAdvancedStats(db))
 	r.Get("/api/stats/fall-of-wickets/{matchId}", handlers.GetFallOfWickets(db))
 	r.Get("/api/stats/leading-wicket-takers", handlers.GetLeadingWicketTakers(db))
