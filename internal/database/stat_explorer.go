@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -332,37 +331,37 @@ func buildBattingBowlingQueries(
 		switch dimension {
 		case "season":
 			groupByParts = append(groupByParts, "stats.season")
-			selectDimParts = append(selectDimParts, `stats.season AS "season"`)
+			selectDimParts = append(selectDimParts, `stats.season AS season`)
 		case "player":
 			groupByParts = append(groupByParts, "stats.player")
-			selectDimParts = append(selectDimParts, `stats.player AS "player"`)
+			selectDimParts = append(selectDimParts, `stats.player AS player`)
 		case "team":
 			groupByParts = append(groupByParts, "stats.team")
-			selectDimParts = append(selectDimParts, `stats.team AS "team"`)
+			selectDimParts = append(selectDimParts, `stats.team AS team`)
 		case "opposition":
 			groupByParts = append(groupByParts, "stats.opposition")
-			selectDimParts = append(selectDimParts, `stats.opposition AS "opposition"`)
+			selectDimParts = append(selectDimParts, `stats.opposition AS opposition`)
 		case "venue":
 			groupByParts = append(groupByParts, "stats.venue")
-			selectDimParts = append(selectDimParts, `stats.venue AS "venue"`)
+			selectDimParts = append(selectDimParts, `stats.venue AS venue`)
 		case "city":
 			groupByParts = append(groupByParts, "stats.city")
-			selectDimParts = append(selectDimParts, `stats.city AS "city"`)
+			selectDimParts = append(selectDimParts, `stats.city AS city`)
 		case "tossWinner":
 			groupByParts = append(groupByParts, "stats.toss_winner")
-			selectDimParts = append(selectDimParts, `stats.toss_winner AS "tossWinner"`)
+			selectDimParts = append(selectDimParts, `stats.toss_winner AS tossWinner`)
 		case "tossDecision":
 			groupByParts = append(groupByParts, "stats.toss_decision")
-			selectDimParts = append(selectDimParts, `stats.toss_decision AS "tossDecision"`)
+			selectDimParts = append(selectDimParts, `stats.toss_decision AS tossDecision`)
 		case "result":
 			groupByParts = append(groupByParts, "stats.match_winner")
-			selectDimParts = append(selectDimParts, `stats.match_winner AS "result"`)
+			selectDimParts = append(selectDimParts, `stats.match_winner AS result`)
 		case "date":
 			groupByParts = append(groupByParts, "stats.start_date::date")
-			selectDimParts = append(selectDimParts, `stats.start_date::date AS "date"`)
+			selectDimParts = append(selectDimParts, `stats.start_date::date AS date_col`)
 		case "innings":
 			groupByParts = append(groupByParts, "stats.innings")
-			selectDimParts = append(selectDimParts, `stats.innings AS "innings"`)
+			selectDimParts = append(selectDimParts, `stats.innings AS innings`)
 		case "battingHand":
 			groupByParts = append(groupByParts, "stats.batting_hand")
 			selectDimParts = append(selectDimParts, `stats.batting_hand AS "battingHand"`)
@@ -385,15 +384,15 @@ func buildBattingBowlingQueries(
 			groupByParts = append(groupByParts, "stats.playing_role")
 			selectDimParts = append(selectDimParts, `stats.playing_role AS "playingRole"`)
 		}
-		sortColumns[strings.ToLower(dimension)] = quoteIdentifier(dimension)
+		sortColumns[strings.ToLower(dimension)] = statExplorerSortColumnForDimension(dimension)
 	}
 
 	selectMetricParts := make([]string, 0, len(request.Metrics))
 	metricKeys := map[string]bool{}
 	for _, metric := range request.Metrics {
-		selectMetricParts = append(selectMetricParts, fmt.Sprintf(`%s AS %s`, statExplorerMetricSQL(metric, isBowling), quoteIdentifier(metric)))
+		selectMetricParts = append(selectMetricParts, fmt.Sprintf(`%s AS %s`, statExplorerMetricSQL(metric, isBowling), strings.ToLower(metric)))
 		metricKeys[strings.ToLower(metric)] = true
-		sortColumns[strings.ToLower(metric)] = quoteIdentifier(metric)
+		sortColumns[strings.ToLower(metric)] = strings.ToLower(metric)
 	}
 
 	allSelectParts := append(selectDimParts, selectMetricParts...)
@@ -401,7 +400,7 @@ func buildBattingBowlingQueries(
 	if len(groupByParts) > 0 {
 		groupByClause = "GROUP BY " + strings.Join(groupByParts, ", ")
 	}
-	defaultOrderBy := fmt.Sprintf("ORDER BY %s DESC", quoteIdentifier(request.Metrics[0]))
+	defaultOrderBy := fmt.Sprintf("ORDER BY %s DESC", strings.ToLower(request.Metrics[0]))
 	orderBy := buildStatExplorerOrderByClause(request.Sort, sortColumns, defaultOrderBy)
 
 	statsCTE := ""
@@ -943,6 +942,21 @@ func statExplorerMetricSQL(metric string, isBowling bool) string {
 	return "0"
 }
 
+func statExplorerSortColumnForDimension(dimension string) string {
+	switch dimension {
+	case "season", "player", "team", "opposition", "venue", "city", "result", "innings":
+		return strings.ToLower(dimension)
+	case "tossWinner":
+		return "tosswinner"
+	case "tossDecision":
+		return "tossdecision"
+	case "date":
+		return "date_col"
+	default:
+		return quoteIdentifier(dimension)
+	}
+}
+
 func normalizeStatExplorerValue(value interface{}, isNumeric bool) interface{} {
 	switch typed := value.(type) {
 	case nil:
@@ -953,7 +967,12 @@ func normalizeStatExplorerValue(value interface{}, isNumeric bool) interface{} {
 		return normalizeStatExplorerStringValue(typed, isNumeric)
 	case time.Time:
 		return typed
-	case int64, int32, int16, int8, int, float64, float32, bool:
+	case int64, int32, int16, int8, int, float64, float32:
+		if isNumeric {
+			return fmt.Sprintf("%v", typed)
+		}
+		return typed
+	case bool:
 		return typed
 	default:
 		return fmt.Sprintf("%v", typed)
@@ -961,14 +980,8 @@ func normalizeStatExplorerValue(value interface{}, isNumeric bool) interface{} {
 }
 
 func normalizeStatExplorerStringValue(value string, isNumeric bool) interface{} {
-	if !isNumeric {
+	if isNumeric {
 		return value
-	}
-	if intValue, err := strconv.ParseInt(value, 10, 64); err == nil {
-		return intValue
-	}
-	if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
-		return floatValue
 	}
 	return value
 }

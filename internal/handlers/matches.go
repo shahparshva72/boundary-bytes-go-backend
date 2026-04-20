@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/database"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
@@ -59,7 +58,7 @@ func GetLatestMatchDate(db database.Service) http.HandlerFunc {
 
 		var latestDateValue *string
 		if latestDate != nil {
-			formatted := latestDate.UTC().Format(time.RFC3339Nano)
+			formatted := latestDate.UTC().Format("2006-01-02T15:04:05.000Z")
 			latestDateValue = &formatted
 		}
 

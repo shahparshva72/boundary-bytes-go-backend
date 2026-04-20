@@ -130,15 +130,7 @@ func (s *service) GetLeadingWicketTakers(ctx context.Context, league string, pag
 			player,
 			wickets,
 			runsConceded,
-			CASE
-				WHEN wickets > 0 THEN ROUND(runsConceded::numeric / wickets, 2)
-				ELSE 0
-			END as average,
 			ballsBowled,
-			CASE
-				WHEN ballsBowled > 0 THEN ROUND(runsConceded::numeric / (ballsBowled::numeric / 6), 2)
-				ELSE 0
-			END as economy,
 			matches,
 			total_count
 		FROM (
@@ -180,14 +172,18 @@ func (s *service) GetLeadingWicketTakers(ctx context.Context, league string, pag
 			&wt.Player,
 			&wt.Wickets,
 			&wt.RunsConceded,
-			&wt.Average,
 			&wt.BallsBowled,
-			&wt.Economy,
 			&wt.Matches,
 			&totalCount,
 		)
 		if err != nil {
 			return nil, 0, err
+		}
+		if wt.Wickets > 0 {
+			wt.Average = float64(wt.RunsConceded) / float64(wt.Wickets)
+		}
+		if wt.BallsBowled > 0 {
+			wt.Economy = float64(wt.RunsConceded) / (float64(wt.BallsBowled) / 6)
 		}
 		wicketTakers = append(wicketTakers, wt)
 	}

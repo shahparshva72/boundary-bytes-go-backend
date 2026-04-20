@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
@@ -162,7 +163,7 @@ func (s *service) GetMatches(
 			SELECT match_id, league, season, date, venue, winner, winner_runs, winner_wickets
 			FROM wpl_match_info
 			WHERE league = $1 %s
-			ORDER BY date ASC
+			ORDER BY date DESC
 			LIMIT $%d OFFSET $%d
 		),
 		match_scores AS (
@@ -201,7 +202,7 @@ func (s *service) GetMatches(
 			(SELECT cnt FROM total) as total_count
 		FROM paginated_matches pm
 		LEFT JOIN match_scores ms ON pm.match_id = ms.match_id
-		ORDER BY pm.date ASC;
+		ORDER BY pm.date DESC;
 	`, seasonClause, limitIndex, offsetIndex, seasonClause)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -278,7 +279,7 @@ func (s *service) GetMatches(
 			Result:        result,
 		}
 		if startDate.Valid {
-			match.StartDate = startDate.Time
+			match.StartDate = startDate.Time.UTC().Format("2006-01-02T15:04:05.000Z")
 		}
 
 		matches = append(matches, match)
@@ -428,7 +429,7 @@ func (s *service) GetTeamAverages(ctx context.Context, league string) ([]models.
 				COUNT(*) FILTER (WHERE wides = 0) as total_balls,
 				COUNT(*) FILTER (
 					WHERE player_dismissed IS NOT NULL
-					AND wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out')
+					AND wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out', 'retired out', 'obstructing the field', 'hit the ball twice', 'handled the ball', 'timed out')
 				) as total_dismissals
 			FROM standardized_deliveries
 			GROUP BY team
@@ -480,8 +481,8 @@ func (s *service) GetTeamAverages(ctx context.Context, league string) ([]models.
 			return nil, err
 		}
 
-		item.BattingAverage = float64(int(item.BattingAverage*100)) / 100
-		item.StrikeRate = float64(int(item.StrikeRate*100)) / 100
+		item.BattingAverage = math.Round(item.BattingAverage*100) / 100
+		item.StrikeRate = math.Round(item.StrikeRate*100) / 100
 		items = append(items, item)
 	}
 

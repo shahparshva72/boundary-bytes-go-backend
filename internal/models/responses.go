@@ -1,7 +1,5 @@
 package models
 
-import "time"
-
 type PlayerListResponse struct {
 	Data     []string           `json:"data"`
 	League   string             `json:"league"`
@@ -357,16 +355,16 @@ type MatchListMetadata struct {
 }
 
 type MatchCard struct {
-	ID            int       `json:"id"`
-	League        string    `json:"league"`
-	Season        string    `json:"season"`
-	StartDate     time.Time `json:"startDate"`
-	Venue         string    `json:"venue"`
-	Team1         string    `json:"team1"`
-	Team2         string    `json:"team2"`
-	Innings1Score string    `json:"innings1Score"`
-	Innings2Score string    `json:"innings2Score"`
-	Result        string    `json:"result"`
+	ID            int    `json:"id"`
+	League        string `json:"league"`
+	Season        string `json:"season"`
+	StartDate     string `json:"startDate"`
+	Venue         string `json:"venue"`
+	Team1         string `json:"team1"`
+	Team2         string `json:"team2"`
+	Innings1Score string `json:"innings1Score"`
+	Innings2Score string `json:"innings2Score"`
+	Result        string `json:"result"`
 }
 
 type MatchesResponse struct {
