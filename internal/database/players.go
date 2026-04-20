@@ -126,18 +126,6 @@ func (s *service) GetLeadingWicketTakers(ctx context.Context, league string, pag
 	offset := (page - 1) * limit
 
 	query := `
-		WITH bowler_stats AS (
-			SELECT
-				d.bowler as player,
-				COUNT(CASE WHEN d.wicket_type IS NOT NULL THEN 1 END)::int as wickets,
-				COALESCE(SUM(d.runs_off_bat + d.extras), 0)::int as runsConceded,
-				COUNT(DISTINCT d.match_id)::int as matches,
-				COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)::int as ballsBowled
-			FROM wpl_delivery d
-			JOIN wpl_match m ON d.match_id = m.match_id
-			WHERE m.league = $1 AND d.innings <= 2
-			GROUP BY d.bowler
-		)
 		SELECT
 			player,
 			wickets,
@@ -152,9 +140,28 @@ func (s *service) GetLeadingWicketTakers(ctx context.Context, league string, pag
 				ELSE 0
 			END as economy,
 			matches,
-			COUNT(*) OVER() as total_count
-		FROM bowler_stats
-		ORDER BY wickets DESC, average ASC
+			total_count
+		FROM (
+			SELECT
+				d.bowler as player,
+				COUNT(*) FILTER (
+					WHERE d.player_dismissed IS NOT NULL
+					AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')
+				)::int as wickets,
+				COALESCE(SUM(d.runs_off_bat + d.wides + d.noballs), 0)::int as runsConceded,
+				COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)::int as ballsBowled,
+				COUNT(DISTINCT d.match_id)::int as matches,
+				COUNT(*) OVER() as total_count
+			FROM wpl_delivery d
+			JOIN wpl_match m ON d.match_id = m.match_id
+			WHERE m.league = $1 AND d.innings <= 2
+			GROUP BY d.bowler
+			HAVING COUNT(*) FILTER (
+				WHERE d.player_dismissed IS NOT NULL
+				AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')
+			) > 0
+		) bowler_stats
+		ORDER BY wickets DESC
 		LIMIT $2 OFFSET $3
 	`
 
@@ -196,19 +203,43 @@ func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page,
 	offset := (page - 1) * limit
 
 	query := `
-		WITH batter_stats AS (
+		WITH innings_data AS (
 			SELECT
-				d.striker as player,
-				COALESCE(SUM(d.runs_off_bat), 0)::int as runs,
-				COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)::int as ballsFaced,
-				COUNT(DISTINCT d.match_id)::int as matches,
-				COUNT(*) FILTER (WHERE d.runs_off_bat = 4)::int as fours,
-				COUNT(*) FILTER (WHERE d.runs_off_bat = 6)::int as sixes,
-				COUNT(*) FILTER (WHERE d.runs_off_bat = 0 AND d.wides = 0 AND d.noballs = 0)::int as dotBalls
+				d.striker,
+				d.match_id,
+				d.innings,
+				SUM(d.runs_off_bat) as innings_runs
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE m.league = $1 AND d.innings <= 2
-			GROUP BY d.striker
+			GROUP BY d.striker, d.match_id, d.innings
+		),
+		innings_agg AS (
+			SELECT
+				striker,
+				COUNT(*) FILTER (WHERE innings_runs >= 50 AND innings_runs < 100)::int as fifties,
+				COUNT(*) FILTER (WHERE innings_runs >= 100)::int as hundreds
+			FROM innings_data
+			GROUP BY striker
+		),
+		batter_stats AS (
+			SELECT
+				d.striker as player,
+				COALESCE(SUM(d.runs_off_bat), 0)::int as runs,
+				COUNT(*) FILTER (WHERE d.wides = 0)::int as ballsFaced,
+				COUNT(DISTINCT d.match_id)::int as matches,
+				COUNT(*) FILTER (WHERE d.runs_off_bat = 4)::int as fours,
+				COUNT(*) FILTER (WHERE d.runs_off_bat = 6)::int as sixes,
+				COUNT(*) FILTER (WHERE d.runs_off_bat = 0)::int as dotBalls,
+				COALESCE(ia.fifties, 0)::int as fifties,
+				COALESCE(ia.hundreds, 0)::int as hundreds,
+				COUNT(*) OVER() as total_count
+			FROM wpl_delivery d
+			JOIN wpl_match m ON d.match_id = m.match_id
+			LEFT JOIN innings_agg ia ON d.striker = ia.striker
+			WHERE m.league = $1 AND d.innings <= 2
+			GROUP BY d.striker, ia.fifties, ia.hundreds
+			HAVING SUM(d.runs_off_bat) > 0
 		)
 		SELECT
 			player,
@@ -225,7 +256,9 @@ func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page,
 				WHEN ballsFaced > 0 THEN (dotBalls::numeric / ballsFaced) * 100
 				ELSE 0
 			END as dotBallPercentage,
-			COUNT(*) OVER() as total_count
+			fifties,
+			hundreds,
+			total_count
 		FROM batter_stats
 		ORDER BY runs DESC
 		LIMIT $2 OFFSET $3
@@ -251,6 +284,8 @@ func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page,
 			&rs.Fours,
 			&rs.Sixes,
 			&rs.DotBallPercentage,
+			&rs.Fifties,
+			&rs.Hundreds,
 			&totalCount,
 		)
 		if err != nil {

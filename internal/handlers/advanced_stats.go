@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/database"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
@@ -18,32 +19,32 @@ func GetBowlingWicketTypes(db database.Service) http.HandlerFunc {
 			return
 		}
 
-	page := 1
-	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
+		page := 1
+		if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+			if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+				page = p
+			}
 		}
-	}
 
-	limit := 10
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
+		limit := 10
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+				limit = l
+			}
 		}
-	}
 
-	data, totalCount, err := db.GetBowlingWicketTypes(r.Context(), league, page, limit)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+		data, totalCount, err := db.GetBowlingWicketTypes(r.Context(), league, page, limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-	leagues, _ := db.GetAllLeagues(r.Context())
-	if leagues == nil {
-		leagues = []string{}
-	}
+		leagues, _ := db.GetAllLeagues(r.Context())
+		if leagues == nil {
+			leagues = []string{}
+		}
 
-	totalPages := (totalCount + limit - 1) / limit
+		totalPages := (totalCount + limit - 1) / limit
 
 		resp := models.BowlingWicketTypesResponse{
 			Data:   data,
@@ -266,7 +267,7 @@ func GetAdvancedStats(db database.Service) http.HandlerFunc {
 func GetFallOfWickets(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		league := r.URL.Query().Get("league")
-		matchParam := strings.TrimPrefix(r.URL.Path, "/api/stats/fall-of-wickets/")
+		matchParam := chi.URLParam(r, "matchId")
 
 		if league == "" {
 			http.Error(w, "league parameter is required", http.StatusBadRequest)

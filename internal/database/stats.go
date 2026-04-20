@@ -12,6 +12,15 @@ import (
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
+const standardizedBattingTeamSQL = `
+	CASE
+		WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
+		WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
+		WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
+		WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
+		ELSE d.batting_team
+	END`
+
 func (s *service) GetBowlingWicketTypes(
 	ctx context.Context,
 	league string,
@@ -63,15 +72,15 @@ func (s *service) GetBowlingWicketTypes(
 	var items []models.BowlingWicketTypesItem
 	for rows.Next() {
 		var (
-			bowler         string
-			caught         int
-			bowled         int
-			lbw            int
-			stumped        int
-			caughtBowled   int
-			hitWicket      int
-			totalWickets   int
-			matches        int
+			bowler       string
+			caught       int
+			bowled       int
+			lbw          int
+			stumped      int
+			caughtBowled int
+			hitWicket    int
+			totalWickets int
+			matches      int
 		)
 		if err := rows.Scan(
 			&bowler,
@@ -247,6 +256,508 @@ func (s *service) GetMultiMatchup(
 	return items, nil
 }
 
+func (s *service) GetRunRateTrend(ctx context.Context, league string, team *string) ([]models.RunRateTrendItem, error) {
+	seasonFloorClause := ""
+	if league == "IPL" {
+		seasonFloorClause = "AND m.season >= '2008'"
+	}
+
+	args := []interface{}{league}
+	teamClause := ""
+	if team != nil && *team != "" {
+		args = append(args, *team)
+		teamClause = fmt.Sprintf("AND %s = $%d", standardizedBattingTeamSQL, len(args))
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			m.season,
+			SUM(d.runs_off_bat + d.extras)::int AS total_runs,
+			SUM(CASE WHEN d.wides = 0 OR d.wides IS NULL THEN 1 ELSE 0 END)::int AS total_balls
+		FROM wpl_delivery d
+		JOIN wpl_match m ON d.match_id = m.match_id
+		WHERE d.innings <= 2
+			AND m.league = $1
+			%s
+			%s
+		GROUP BY m.season
+		ORDER BY m.season ASC;
+	`, seasonFloorClause, teamClause)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []models.RunRateTrendItem{}
+	for rows.Next() {
+		var item models.RunRateTrendItem
+		if err := rows.Scan(&item.Season, &item.TotalRuns, &item.TotalBalls); err != nil {
+			return nil, err
+		}
+		if item.TotalBalls > 0 {
+			item.AvgRunRate = math.Round((float64(item.TotalRuns)/(float64(item.TotalBalls)/6))*100) / 100
+		}
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (s *service) GetTeamRunRateProgression(
+	ctx context.Context,
+	league string,
+	team string,
+	season string,
+) ([]models.TeamRunRateProgressionPoint, models.TeamRunRateProgressionMetadata, error) {
+	aggregatedQuery := fmt.Sprintf(`
+		WITH standardized_deliveries AS (
+			SELECT
+				%s as team,
+				d.match_id,
+				d.innings,
+				d.ball,
+				d.runs_off_bat,
+				d.extras,
+				d.wides
+			FROM wpl_delivery d
+			JOIN wpl_match m ON d.match_id = m.match_id
+			WHERE d.innings <= 2
+				AND m.league = $1
+				AND m.season = $2
+		)
+		SELECT
+			FLOOR(CAST(ball AS DECIMAL(10,2)))::int + 1 AS over_number,
+			SUM(runs_off_bat + extras)::int AS runs,
+			SUM(CASE WHEN wides = 0 OR wides IS NULL THEN 1 ELSE 0 END)::int AS balls
+		FROM standardized_deliveries
+		WHERE team = $3
+			AND FLOOR(CAST(ball AS DECIMAL(10,2)))::int + 1 BETWEEN 1 AND 20
+		GROUP BY over_number
+		ORDER BY over_number;
+	`, standardizedBattingTeamSQL)
+
+	rows, err := s.db.QueryContext(ctx, aggregatedQuery, league, season, team)
+	if err != nil {
+		return nil, models.TeamRunRateProgressionMetadata{}, err
+	}
+	defer rows.Close()
+
+	overData := map[int]struct {
+		runs  int
+		balls int
+	}{}
+	for rows.Next() {
+		var over int
+		var runs int
+		var balls int
+		if err := rows.Scan(&over, &runs, &balls); err != nil {
+			return nil, models.TeamRunRateProgressionMetadata{}, err
+		}
+		overData[over] = struct {
+			runs  int
+			balls int
+		}{runs: runs, balls: balls}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, models.TeamRunRateProgressionMetadata{}, err
+	}
+
+	metadataQuery := fmt.Sprintf(`
+		WITH standardized_deliveries AS (
+			SELECT
+				%s as team,
+				d.match_id,
+				d.innings,
+				d.ball
+			FROM wpl_delivery d
+			JOIN wpl_match m ON d.match_id = m.match_id
+			WHERE d.innings <= 2
+				AND m.league = $1
+				AND m.season = $2
+		)
+		SELECT
+			COUNT(DISTINCT CONCAT(match_id, '-', innings))::int AS total_innings,
+			COUNT(DISTINCT match_id)::int AS total_matches,
+			COUNT(*)::int AS total_deliveries
+		FROM standardized_deliveries
+		WHERE team = $3;
+	`, standardizedBattingTeamSQL)
+
+	metadata := models.TeamRunRateProgressionMetadata{}
+	if err := s.db.QueryRowContext(ctx, metadataQuery, league, season, team).Scan(
+		&metadata.TotalInnings,
+		&metadata.TotalMatches,
+		&metadata.TotalDeliveries,
+	); err != nil {
+		return nil, models.TeamRunRateProgressionMetadata{}, err
+	}
+
+	progression := make([]models.TeamRunRateProgressionPoint, 0, 20)
+	for over := 1; over <= 20; over++ {
+		data := overData[over]
+		runRate := 0.0
+		if data.balls > 0 {
+			runRate = float64(data.runs) / (float64(data.balls) / 6)
+		}
+
+		progression = append(progression, models.TeamRunRateProgressionPoint{
+			Over:    over,
+			Phase:   phaseForOver(over),
+			Runs:    data.runs,
+			Balls:   data.balls,
+			RunRate: math.Round(runRate*100) / 100,
+		})
+	}
+
+	return progression, metadata, nil
+}
+
+func (s *service) GetPlayerCompare(
+	ctx context.Context,
+	league string,
+	players []string,
+	seasons []string,
+	team *string,
+	statType string,
+) ([]models.PlayerComparePlayer, error) {
+	comparedPlayers := make([]models.PlayerComparePlayer, len(players))
+	playerIndex := make(map[string]int, len(players))
+	for index, player := range players {
+		comparedPlayers[index] = models.PlayerComparePlayer{Name: player}
+		playerIndex[player] = index
+	}
+
+	if statType == "batting" || statType == "both" {
+		battingStats, err := s.getPlayerCompareBatting(ctx, league, players, seasons, team)
+		if err != nil {
+			return nil, err
+		}
+		for _, stat := range battingStats {
+			index, ok := playerIndex[stat.Player]
+			if !ok {
+				continue
+			}
+
+			runs := stat.Runs
+			ballsFaced := stat.BallsFaced
+			innings := stat.Innings
+			notOuts := stat.NotOuts
+			dismissals := innings - notOuts
+
+			batting := &models.PlayerCompareBatting{
+				Runs:         runs,
+				BallsFaced:   ballsFaced,
+				Innings:      innings,
+				NotOuts:      notOuts,
+				HighestScore: stat.HighestScore,
+				Fours:        stat.Fours,
+				Sixes:        stat.Sixes,
+				Fifties:      stat.Fifties,
+				Hundreds:     stat.Hundreds,
+			}
+			if ballsFaced > 0 {
+				batting.StrikeRate = math.Round((float64(runs)/float64(ballsFaced))*10000) / 100
+			}
+			if dismissals > 0 {
+				batting.Average = math.Round((float64(runs)/float64(dismissals))*100) / 100
+			} else {
+				batting.Average = float64(runs)
+			}
+
+			comparedPlayers[index].Batting = batting
+		}
+	}
+
+	if statType == "bowling" || statType == "both" {
+		bowlingStats, err := s.getPlayerCompareBowling(ctx, league, players, seasons, team)
+		if err != nil {
+			return nil, err
+		}
+		for _, stat := range bowlingStats {
+			index, ok := playerIndex[stat.Player]
+			if !ok {
+				continue
+			}
+
+			bowling := &models.PlayerCompareBowling{
+				Wickets:      stat.Wickets,
+				BallsBowled:  stat.BallsBowled,
+				RunsConceded: stat.RunsConceded,
+				Innings:      stat.Innings,
+				FourWickets:  stat.FourWickets,
+				FiveWickets:  stat.FiveWickets,
+			}
+			if stat.BallsBowled > 0 {
+				bowling.Economy = math.Round((float64(stat.RunsConceded)/(float64(stat.BallsBowled)/6))*100) / 100
+			}
+			if stat.Wickets > 0 {
+				bowling.Average = math.Round((float64(stat.RunsConceded)/float64(stat.Wickets))*100) / 100
+				bowling.StrikeRate = math.Round((float64(stat.BallsBowled)/float64(stat.Wickets))*100) / 100
+			}
+
+			comparedPlayers[index].Bowling = bowling
+		}
+	}
+
+	return comparedPlayers, nil
+}
+
+func (s *service) getPlayerCompareBatting(
+	ctx context.Context,
+	league string,
+	players []string,
+	seasons []string,
+	team *string,
+) ([]playerCompareBattingRow, error) {
+	args := []interface{}{league}
+	argIndex := 2
+	playerClause := buildInClause(len(players), argIndex)
+	for _, player := range players {
+		args = append(args, player)
+	}
+	argIndex += len(players)
+
+	seasonClause := ""
+	if len(seasons) > 0 {
+		seasonClause = fmt.Sprintf("AND m.season IN %s", buildInClause(len(seasons), argIndex))
+		for _, season := range seasons {
+			args = append(args, season)
+		}
+		argIndex += len(seasons)
+	}
+
+	teamClause := ""
+	if team != nil && *team != "" {
+		teamClause = fmt.Sprintf("AND d.batting_team = $%d", argIndex)
+		args = append(args, *team)
+	}
+
+	query := fmt.Sprintf(`
+		WITH innings_data AS (
+			SELECT
+				d.striker,
+				d.match_id,
+				d.innings,
+				SUM(d.runs_off_bat)::int as innings_runs,
+				COUNT(*) FILTER (WHERE d.runs_off_bat = 4)::int as fours,
+				COUNT(*) FILTER (WHERE d.runs_off_bat = 6)::int as sixes,
+				COUNT(*) FILTER (WHERE d.wides = 0)::int as balls_faced
+			FROM wpl_delivery d
+			JOIN wpl_match m ON d.match_id = m.match_id
+			WHERE d.striker IN %s
+				AND m.league = $1
+				AND d.innings <= 2
+				%s
+				%s
+			GROUP BY d.striker, d.match_id, d.innings
+		),
+		dismissals_data AS (
+			SELECT
+				d.player_dismissed as player,
+				d.match_id,
+				d.innings,
+				1 as was_out
+			FROM wpl_delivery d
+			JOIN wpl_match m ON d.match_id = m.match_id
+			WHERE d.player_dismissed IN %s
+				AND m.league = $1
+				AND d.innings <= 2
+				AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out', 'retired out', 'obstructing the field', 'hit the ball twice', 'handled the ball', 'timed out')
+				%s
+				%s
+			GROUP BY d.player_dismissed, d.match_id, d.innings
+		),
+		combined_innings AS (
+			SELECT
+				i.striker,
+				i.match_id,
+				i.innings,
+				i.innings_runs,
+				i.fours,
+				i.sixes,
+				i.balls_faced,
+				COALESCE(dd.was_out, 0) as was_out
+			FROM innings_data i
+			LEFT JOIN dismissals_data dd
+				ON i.striker = dd.player AND i.match_id = dd.match_id AND i.innings = dd.innings
+		),
+		innings_agg AS (
+			SELECT
+				striker,
+				COUNT(*)::int as innings,
+				COUNT(*) FILTER (WHERE was_out = 0)::int as not_outs,
+				MAX(innings_runs)::int as highest_score,
+				COUNT(*) FILTER (WHERE innings_runs >= 50 AND innings_runs < 100)::int as fifties,
+				COUNT(*) FILTER (WHERE innings_runs >= 100)::int as hundreds
+			FROM combined_innings
+			GROUP BY striker
+		)
+		SELECT
+			c.striker,
+			COALESCE(SUM(c.innings_runs), 0)::int as runs,
+			COALESCE(SUM(c.balls_faced), 0)::int as balls_faced,
+			COALESCE(ia.innings, 0)::int as innings,
+			COALESCE(ia.not_outs, 0)::int as not_outs,
+			COALESCE(ia.highest_score, 0)::int as highest_score,
+			COALESCE(SUM(c.fours), 0)::int as fours,
+			COALESCE(SUM(c.sixes), 0)::int as sixes,
+			COALESCE(ia.fifties, 0)::int as fifties,
+			COALESCE(ia.hundreds, 0)::int as hundreds
+		FROM combined_innings c
+		LEFT JOIN innings_agg ia ON c.striker = ia.striker
+		GROUP BY c.striker, ia.innings, ia.not_outs, ia.highest_score, ia.fifties, ia.hundreds;
+	`, playerClause, seasonClause, teamClause, playerClause, seasonClause, teamClause)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := []playerCompareBattingRow{}
+	for rows.Next() {
+		var stat playerCompareBattingRow
+		if err := rows.Scan(
+			&stat.Player,
+			&stat.Runs,
+			&stat.BallsFaced,
+			&stat.Innings,
+			&stat.NotOuts,
+			&stat.HighestScore,
+			&stat.Fours,
+			&stat.Sixes,
+			&stat.Fifties,
+			&stat.Hundreds,
+		); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return stats, nil
+}
+
+func (s *service) getPlayerCompareBowling(
+	ctx context.Context,
+	league string,
+	players []string,
+	seasons []string,
+	team *string,
+) ([]playerCompareBowlingRow, error) {
+	args := []interface{}{league}
+	argIndex := 2
+	playerClause := buildInClause(len(players), argIndex)
+	for _, player := range players {
+		args = append(args, player)
+	}
+	argIndex += len(players)
+
+	seasonClause := ""
+	if len(seasons) > 0 {
+		seasonClause = fmt.Sprintf("AND m.season IN %s", buildInClause(len(seasons), argIndex))
+		for _, season := range seasons {
+			args = append(args, season)
+		}
+		argIndex += len(seasons)
+	}
+
+	teamClause := ""
+	if team != nil && *team != "" {
+		teamClause = fmt.Sprintf("AND d.bowling_team = $%d", argIndex)
+		args = append(args, *team)
+	}
+
+	query := fmt.Sprintf(`
+		WITH bowling_innings AS (
+			SELECT
+				d.bowler,
+				d.match_id,
+				d.innings,
+				COUNT(*) FILTER (
+					WHERE d.player_dismissed IS NOT NULL
+					AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')
+				)::int as wickets_in_innings
+			FROM wpl_delivery d
+			JOIN wpl_match m ON d.match_id = m.match_id
+			WHERE d.bowler IN %s
+				AND m.league = $1
+				AND d.innings <= 2
+				%s
+				%s
+			GROUP BY d.bowler, d.match_id, d.innings
+		),
+		innings_agg AS (
+			SELECT
+				bowler,
+				COUNT(*)::int as innings,
+				COUNT(*) FILTER (WHERE wickets_in_innings >= 4 AND wickets_in_innings < 5)::int as four_wickets,
+				COUNT(*) FILTER (WHERE wickets_in_innings >= 5)::int as five_wickets
+			FROM bowling_innings
+			GROUP BY bowler
+		)
+		SELECT
+			d.bowler,
+			COUNT(*) FILTER (
+				WHERE d.player_dismissed IS NOT NULL
+				AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')
+			)::int as wickets,
+			COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)::int as balls_bowled,
+			COALESCE(SUM(d.runs_off_bat + d.wides + d.noballs), 0)::int as runs_conceded,
+			COALESCE(ia.innings, 0)::int as innings,
+			COALESCE(ia.four_wickets, 0)::int as four_wickets,
+			COALESCE(ia.five_wickets, 0)::int as five_wickets
+		FROM wpl_delivery d
+		JOIN wpl_match m ON d.match_id = m.match_id
+		LEFT JOIN innings_agg ia ON d.bowler = ia.bowler
+		WHERE d.bowler IN %s
+			AND m.league = $1
+			AND d.innings <= 2
+			%s
+			%s
+		GROUP BY d.bowler, ia.innings, ia.four_wickets, ia.five_wickets;
+	`, playerClause, seasonClause, teamClause, playerClause, seasonClause, teamClause)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := []playerCompareBowlingRow{}
+	for rows.Next() {
+		var stat playerCompareBowlingRow
+		if err := rows.Scan(
+			&stat.Player,
+			&stat.Wickets,
+			&stat.BallsBowled,
+			&stat.RunsConceded,
+			&stat.Innings,
+			&stat.FourWickets,
+			&stat.FiveWickets,
+		); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return stats, nil
+}
+
 func (s *service) GetPlayerProgression(
 	ctx context.Context,
 	league string,
@@ -344,8 +855,8 @@ func (s *service) GetPlayerProgression(
 	`, inningsClause)
 
 	var (
-		totalInnings int
-		totalMatches int
+		totalInnings    int
+		totalMatches    int
 		totalDeliveries int
 	)
 
@@ -354,9 +865,9 @@ func (s *service) GetPlayerProgression(
 	}
 
 	metadata := models.PlayerProgressionMetadata{
-		TotalInnings:     totalInnings,
-		TotalMatches:     totalMatches,
-		TotalDeliveries:  totalDeliveries,
+		TotalInnings:    totalInnings,
+		TotalMatches:    totalMatches,
+		TotalDeliveries: totalDeliveries,
 	}
 
 	return progression, metadata, nil
@@ -476,11 +987,11 @@ func (s *service) GetFallOfWickets(
 
 	var (
 		matchIDValue int
-		matchLeague string
-		matchSeason string
-		matchDate sql.NullTime
-		venue string
-		teams string
+		matchLeague  string
+		matchSeason  string
+		matchDate    sql.NullTime
+		venue        string
+		teams        string
 	)
 
 	if err := s.db.QueryRowContext(ctx, matchQuery, matchID, league).Scan(
@@ -555,14 +1066,14 @@ func (s *service) GetFallOfWickets(
 	count := 0
 	for rows.Next() {
 		var (
-			innings int
-			battingTeam string
-			ball string
+			innings         int
+			battingTeam     string
+			ball            string
 			playerDismissed string
-			wicketType string
-			bowler string
-			wicketNumber int
-			runsAtFall int
+			wicketType      string
+			bowler          string
+			wicketNumber    int
+			runsAtFall      int
 		)
 		if err := rows.Scan(
 			&innings,
@@ -709,12 +1220,12 @@ func calculateAdvancedBowlerStats(deliveries []deliveryRow) models.AdvancedStats
 	noballs := 0
 
 	bowlerWicketTypes := map[string]bool{
-		"bowled": true,
-		"caught": true,
-		"lbw": true,
-		"stumped": true,
+		"bowled":            true,
+		"caught":            true,
+		"lbw":               true,
+		"stumped":           true,
 		"caught and bowled": true,
-		"hit wicket": true,
+		"hit wicket":        true,
 	}
 
 	for _, d := range deliveries {
@@ -779,11 +1290,34 @@ func buildInClause(count int, startIndex int) string {
 }
 
 type deliveryRow struct {
-	runsOffBat     int
-	extras         int
-	wides          int
-	noballs        int
+	runsOffBat      int
+	extras          int
+	wides           int
+	noballs         int
 	playerDismissed sql.NullString
-	wicketType     sql.NullString
-	ball           string
+	wicketType      sql.NullString
+	ball            string
+}
+
+type playerCompareBattingRow struct {
+	Player       string
+	Runs         int
+	BallsFaced   int
+	Innings      int
+	NotOuts      int
+	HighestScore int
+	Fours        int
+	Sixes        int
+	Fifties      int
+	Hundreds     int
+}
+
+type playerCompareBowlingRow struct {
+	Player       string
+	Wickets      int
+	BallsBowled  int
+	RunsConceded int
+	Innings      int
+	FourWickets  int
+	FiveWickets  int
 }

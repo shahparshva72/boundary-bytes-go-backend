@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
@@ -36,6 +37,25 @@ func (s *service) GetSeasonsByLeague(ctx context.Context, league string) ([]stri
 	}
 
 	return seasons, nil
+}
+
+func (s *service) GetLatestMatchDate(ctx context.Context, league string) (*time.Time, error) {
+	query := `
+		SELECT MAX(start_date)
+		FROM wpl_match
+		WHERE league = $1;
+	`
+
+	var latestDate sql.NullTime
+	if err := s.db.QueryRowContext(ctx, query, league).Scan(&latestDate); err != nil {
+		return nil, err
+	}
+	if !latestDate.Valid {
+		return nil, nil
+	}
+
+	value := latestDate.Time
+	return &value, nil
 }
 
 func (s *service) GetMatchList(ctx context.Context, league string) ([]models.MatchListItem, error) {

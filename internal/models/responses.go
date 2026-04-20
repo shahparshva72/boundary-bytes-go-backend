@@ -84,6 +84,109 @@ type RunScorer struct {
 	Fours             int     `json:"fours"`
 	Sixes             int     `json:"sixes"`
 	DotBallPercentage float64 `json:"dotBallPercentage"`
+	Fifties           int     `json:"fifties"`
+	Hundreds          int     `json:"hundreds"`
+}
+
+type LatestMatchDateResponse struct {
+	League     string  `json:"league"`
+	LatestDate *string `json:"latestDate"`
+}
+
+type RunRateTrendItem struct {
+	Season     string  `json:"season"`
+	AvgRunRate float64 `json:"avgRunRate"`
+	TotalRuns  int     `json:"totalRuns"`
+	TotalBalls int     `json:"totalBalls"`
+}
+
+type RunRateTrendResponse struct {
+	Data     []RunRateTrendItem   `json:"data"`
+	Team     *string              `json:"team"`
+	League   string               `json:"league"`
+	Metadata RunRateTrendMetadata `json:"metadata"`
+}
+
+type RunRateTrendMetadata struct {
+	AvailableLeagues []string `json:"availableLeagues"`
+	TotalSeasons     int      `json:"totalSeasons"`
+}
+
+type TeamRunRateProgressionPoint struct {
+	Over    int     `json:"over"`
+	Phase   string  `json:"phase"`
+	Runs    int     `json:"runs"`
+	Balls   int     `json:"balls"`
+	RunRate float64 `json:"runRate"`
+}
+
+type TeamRunRateProgressionResponse struct {
+	Data     []TeamRunRateProgressionPoint  `json:"data"`
+	Team     string                         `json:"team"`
+	Season   string                         `json:"season"`
+	League   string                         `json:"league"`
+	Metadata TeamRunRateProgressionMetadata `json:"metadata"`
+}
+
+type TeamRunRateProgressionMetadata struct {
+	TotalInnings     int      `json:"totalInnings"`
+	TotalMatches     int      `json:"totalMatches"`
+	TotalDeliveries  int      `json:"totalDeliveries"`
+	AvailableLeagues []string `json:"availableLeagues"`
+}
+
+type PlayerCompareBatting struct {
+	Runs         int     `json:"runs"`
+	BallsFaced   int     `json:"ballsFaced"`
+	Innings      int     `json:"innings"`
+	NotOuts      int     `json:"notOuts"`
+	HighestScore int     `json:"highestScore"`
+	StrikeRate   float64 `json:"strikeRate"`
+	Average      float64 `json:"average"`
+	Fours        int     `json:"fours"`
+	Sixes        int     `json:"sixes"`
+	Fifties      int     `json:"fifties"`
+	Hundreds     int     `json:"hundreds"`
+}
+
+type PlayerCompareBowling struct {
+	Wickets      int     `json:"wickets"`
+	BallsBowled  int     `json:"ballsBowled"`
+	RunsConceded int     `json:"runsConceded"`
+	Innings      int     `json:"innings"`
+	Economy      float64 `json:"economy"`
+	Average      float64 `json:"average"`
+	StrikeRate   float64 `json:"strikeRate"`
+	FourWickets  int     `json:"fourWickets"`
+	FiveWickets  int     `json:"fiveWickets"`
+}
+
+type PlayerComparePlayer struct {
+	Name    string                `json:"name"`
+	Batting *PlayerCompareBatting `json:"batting,omitempty"`
+	Bowling *PlayerCompareBowling `json:"bowling,omitempty"`
+}
+
+type PlayerCompareFilters struct {
+	Seasons  []string `json:"seasons"`
+	Team     *string  `json:"team"`
+	StatType string   `json:"statType"`
+}
+
+type PlayerCompareData struct {
+	Players []PlayerComparePlayer `json:"players"`
+	Filters PlayerCompareFilters  `json:"filters"`
+}
+
+type PlayerCompareMetadata struct {
+	AvailableLeagues []string `json:"availableLeagues"`
+	PlayerCount      int      `json:"playerCount"`
+}
+
+type PlayerCompareResponse struct {
+	Data     PlayerCompareData     `json:"data"`
+	League   string                `json:"league"`
+	Metadata PlayerCompareMetadata `json:"metadata"`
 }
 
 type NewsAPIResponse struct {
@@ -158,10 +261,10 @@ type MatchCard struct {
 }
 
 type MatchesResponse struct {
-	Matches    []MatchCard    `json:"matches"`
-	League     string         `json:"league"`
-	Pagination Pagination     `json:"pagination"`
-	Seasons    []string       `json:"seasons"`
+	Matches    []MatchCard     `json:"matches"`
+	League     string          `json:"league"`
+	Pagination Pagination      `json:"pagination"`
+	Seasons    []string        `json:"seasons"`
 	Metadata   MatchesMetadata `json:"metadata"`
 }
 
@@ -203,8 +306,8 @@ type TeamAverageItem struct {
 }
 
 type TeamAveragesResponse struct {
-	Data     []TeamAverageItem   `json:"data"`
-	League   string              `json:"league"`
+	Data     []TeamAverageItem    `json:"data"`
+	League   string               `json:"league"`
 	Metadata TeamAveragesMetadata `json:"metadata"`
 }
 
@@ -242,16 +345,16 @@ type BowlingWicketTypesMetadata struct {
 }
 
 type MultiMatchupItem struct {
-	Opponent     string  `json:"opponent"`
-	RunsScored   int     `json:"runsScored"`
-	BallsFaced   int     `json:"ballsFaced"`
-	Dismissals   int     `json:"dismissals"`
-	StrikeRate   float64 `json:"strikeRate"`
-	EconomyRate  float64 `json:"economyRate"`
-	Average      float64 `json:"average"`
-	Fours        int     `json:"fours"`
-	Sixes        int     `json:"sixes"`
-	DotBalls     int     `json:"dotBalls"`
+	Opponent    string  `json:"opponent"`
+	RunsScored  int     `json:"runsScored"`
+	BallsFaced  int     `json:"ballsFaced"`
+	Dismissals  int     `json:"dismissals"`
+	StrikeRate  float64 `json:"strikeRate"`
+	EconomyRate float64 `json:"economyRate"`
+	Average     float64 `json:"average"`
+	Fours       int     `json:"fours"`
+	Sixes       int     `json:"sixes"`
+	DotBalls    int     `json:"dotBalls"`
 }
 
 type MultiMatchupCombined struct {
@@ -282,21 +385,21 @@ type MultiMatchupMetadata struct {
 }
 
 type PlayerProgressionPoint struct {
-	Over        int      `json:"over"`
-	Phase       string   `json:"phase"`
-	Runs        int      `json:"runs"`
-	Balls       int      `json:"balls"`
-	Dismissals  int      `json:"dismissals"`
-	StrikeRate  float64  `json:"strikeRate"`
-	Average     *float64 `json:"average"`
+	Over       int      `json:"over"`
+	Phase      string   `json:"phase"`
+	Runs       int      `json:"runs"`
+	Balls      int      `json:"balls"`
+	Dismissals int      `json:"dismissals"`
+	StrikeRate float64  `json:"strikeRate"`
+	Average    *float64 `json:"average"`
 }
 
 type PlayerProgressionResponse struct {
-	Data     []PlayerProgressionPoint   `json:"data"`
-	Player   string                     `json:"player"`
-	League   string                     `json:"league"`
-	Innings  *string                    `json:"innings"`
-	Metadata PlayerProgressionMetadata  `json:"metadata"`
+	Data     []PlayerProgressionPoint  `json:"data"`
+	Player   string                    `json:"player"`
+	League   string                    `json:"league"`
+	Innings  *string                   `json:"innings"`
+	Metadata PlayerProgressionMetadata `json:"metadata"`
 }
 
 type PlayerProgressionMetadata struct {
@@ -330,12 +433,12 @@ type AdvancedStatsBowlerData struct {
 }
 
 type AdvancedStatsResponse struct {
-	Data       interface{}            `json:"data"`
-	League     string                 `json:"league"`
-	Player     string                 `json:"player"`
-	PlayerType string                 `json:"playerType"`
-	Overs      []int                  `json:"overs"`
-	Metadata   AdvancedStatsMetadata  `json:"metadata"`
+	Data       interface{}           `json:"data"`
+	League     string                `json:"league"`
+	Player     string                `json:"player"`
+	PlayerType string                `json:"playerType"`
+	Overs      []int                 `json:"overs"`
+	Metadata   AdvancedStatsMetadata `json:"metadata"`
 }
 
 type AdvancedStatsMetadata struct {
@@ -359,9 +462,9 @@ type FallOfWicketsMatchInfo struct {
 }
 
 type FallOfWicketsInnings struct {
-	InningsNumber int                   `json:"inningsNumber"`
-	BattingTeam   string                `json:"battingTeam"`
-	Wickets       []FallOfWicketsEntry  `json:"wickets"`
+	InningsNumber int                  `json:"inningsNumber"`
+	BattingTeam   string               `json:"battingTeam"`
+	Wickets       []FallOfWicketsEntry `json:"wickets"`
 }
 
 type FallOfWicketsEntry struct {

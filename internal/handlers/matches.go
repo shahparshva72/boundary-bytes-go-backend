@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/database"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
@@ -35,6 +36,36 @@ func GetSeasons(db database.Service) http.HandlerFunc {
 				AvailableLeagues: leagues,
 				TotalSeasons:     len(seasons),
 			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func GetLatestMatchDate(db database.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		league := r.URL.Query().Get("league")
+		if league == "" {
+			http.Error(w, "league parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		latestDate, err := db.GetLatestMatchDate(r.Context(), league)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var latestDateValue *string
+		if latestDate != nil {
+			formatted := latestDate.UTC().Format(time.RFC3339Nano)
+			latestDateValue = &formatted
+		}
+
+		resp := models.LatestMatchDateResponse{
+			League:     league,
+			LatestDate: latestDateValue,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -148,8 +179,8 @@ func GetTeamWins(db database.Service) http.HandlerFunc {
 			return
 		}
 
-	data, err := db.GetTeamWins(r.Context(), league)
-	if err != nil {
+		data, err := db.GetTeamWins(r.Context(), league)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -181,8 +212,8 @@ func GetTeamAverages(db database.Service) http.HandlerFunc {
 			return
 		}
 
-	data, err := db.GetTeamAverages(r.Context(), league)
-	if err != nil {
+		data, err := db.GetTeamAverages(r.Context(), league)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
