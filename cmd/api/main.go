@@ -21,6 +21,7 @@ func main() {
 	srv := server.NewServer(db)
 
 	fmt.Printf("Server starting on :%s\n", cfg.Port)
+	
 	if err := srv.Start(cfg.Port); err != nil {
 		log.Fatalf("could not start server: %v", err)
 	}
