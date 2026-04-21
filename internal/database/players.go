@@ -199,64 +199,70 @@ func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page,
 	offset := (page - 1) * limit
 
 	query := `
-		WITH innings_data AS (
+		WITH filtered_deliveries AS MATERIALIZED (
 			SELECT
 				d.striker,
 				d.match_id,
-				d.innings,
-				SUM(d.runs_off_bat) as innings_runs
+				d.runs_off_bat,
+				d.wides
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE m.league = $1 AND d.innings <= 2
-			GROUP BY d.striker, d.match_id, d.innings
+		),
+		aggregated AS (
+			SELECT
+				striker,
+				match_id,
+				COALESCE(SUM(runs_off_bat), 0)::int as runs,
+				COUNT(*) FILTER (WHERE wides = 0)::int as ballsFaced,
+				COUNT(*) FILTER (WHERE runs_off_bat = 4)::int as fours,
+				COUNT(*) FILTER (WHERE runs_off_bat = 6)::int as sixes,
+				COUNT(*) FILTER (WHERE runs_off_bat = 0)::int as dotBalls
+			FROM filtered_deliveries
+			GROUP BY GROUPING SETS ((striker), (striker, match_id))
+		),
+		player_totals AS (
+			SELECT
+				striker as player,
+				runs,
+				ballsFaced,
+				fours,
+				sixes,
+				dotBalls
+			FROM aggregated
+			WHERE match_id IS NULL AND runs > 0
 		),
 		innings_agg AS (
 			SELECT
 				striker,
-				COUNT(*) FILTER (WHERE innings_runs >= 50 AND innings_runs < 100)::int as fifties,
-				COUNT(*) FILTER (WHERE innings_runs >= 100)::int as hundreds
-			FROM innings_data
+				COUNT(*)::int as matches,
+				COUNT(*) FILTER (WHERE runs >= 50 AND runs < 100)::int as fifties,
+				COUNT(*) FILTER (WHERE runs >= 100)::int as hundreds
+			FROM aggregated
+			WHERE match_id IS NOT NULL
 			GROUP BY striker
-		),
-		batter_stats AS (
-			SELECT
-				d.striker as player,
-				COALESCE(SUM(d.runs_off_bat), 0)::int as runs,
-				COUNT(*) FILTER (WHERE d.wides = 0)::int as ballsFaced,
-				COUNT(DISTINCT d.match_id)::int as matches,
-				COUNT(*) FILTER (WHERE d.runs_off_bat = 4)::int as fours,
-				COUNT(*) FILTER (WHERE d.runs_off_bat = 6)::int as sixes,
-				COUNT(*) FILTER (WHERE d.runs_off_bat = 0)::int as dotBalls,
-				COALESCE(ia.fifties, 0)::int as fifties,
-				COALESCE(ia.hundreds, 0)::int as hundreds,
-				COUNT(*) OVER() as total_count
-			FROM wpl_delivery d
-			JOIN wpl_match m ON d.match_id = m.match_id
-			LEFT JOIN innings_agg ia ON d.striker = ia.striker
-			WHERE m.league = $1 AND d.innings <= 2
-			GROUP BY d.striker, ia.fifties, ia.hundreds
-			HAVING SUM(d.runs_off_bat) > 0
 		)
 		SELECT
-			player,
-			runs,
-			ballsFaced,
+			pt.player,
+			pt.runs,
+			pt.ballsFaced,
 			CASE
-				WHEN ballsFaced > 0 THEN (runs::numeric / ballsFaced) * 100
+				WHEN pt.ballsFaced > 0 THEN (pt.runs::numeric / pt.ballsFaced) * 100
 				ELSE 0
 			END as strikeRate,
-			matches,
-			fours,
-			sixes,
+			COALESCE(ia.matches, 0)::int as matches,
+			pt.fours,
+			pt.sixes,
 			CASE
-				WHEN ballsFaced > 0 THEN (dotBalls::numeric / ballsFaced) * 100
+				WHEN pt.ballsFaced > 0 THEN (pt.dotBalls::numeric / pt.ballsFaced) * 100
 				ELSE 0
 			END as dotBallPercentage,
-			fifties,
-			hundreds,
-			total_count
-		FROM batter_stats
-		ORDER BY runs DESC
+			COALESCE(ia.fifties, 0)::int as fifties,
+			COALESCE(ia.hundreds, 0)::int as hundreds,
+			COUNT(*) OVER() as total_count
+		FROM player_totals pt
+		LEFT JOIN innings_agg ia ON pt.player = ia.striker
+		ORDER BY pt.runs DESC
 		LIMIT $2 OFFSET $3
 	`
 
