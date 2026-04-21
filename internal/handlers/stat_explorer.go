@@ -10,24 +10,23 @@ import (
 
 func GetStatExplorerOptions(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
+		league, ok := resolveLeague(w, r)
+		if !ok {
+			return
+		}
 		reportType := r.URL.Query().Get("reportType")
 		if reportType == "" {
 			reportType = "batting"
 		}
 
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
-			return
-		}
 		if !isValidStatExplorerReportType(reportType) {
-			http.Error(w, "Invalid reportType", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Invalid reportType")
 			return
 		}
 
 		options, err := db.GetStatExplorerOptions(r.Context(), league, reportType)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -46,40 +45,39 @@ func GetStatExplorerOptions(db database.Service) http.HandlerFunc {
 
 func RunStatExplorer(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
 		var request models.StatExplorerRunRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
 
 		if request.ReportType == "" {
-			http.Error(w, "reportType is required", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "reportType is required")
 			return
 		}
 		if !isValidStatExplorerReportType(request.ReportType) {
-			http.Error(w, "Invalid reportType", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Invalid reportType")
 			return
 		}
 		if len(request.Dimensions) < 1 || len(request.Dimensions) > 3 {
-			http.Error(w, "dimensions must contain between 1 and 3 values", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "dimensions must contain between 1 and 3 values")
 			return
 		}
 		if len(request.Metrics) < 1 || len(request.Metrics) > 8 {
-			http.Error(w, "metrics must contain between 1 and 8 values", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "metrics must contain between 1 and 8 values")
 			return
 		}
 		if len(request.Filters.Seasons) > 10 {
-			http.Error(w, "Maximum 10 seasons can be filtered", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Maximum 10 seasons can be filtered")
 			return
 		}
 		if request.Sort != nil && request.Sort.Direction != "" && request.Sort.Direction != "asc" && request.Sort.Direction != "desc" {
-			http.Error(w, "sort.direction must be asc or desc", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "sort.direction must be asc or desc")
 			return
 		}
 		if request.Pagination.Page == 0 {
@@ -89,21 +87,21 @@ func RunStatExplorer(db database.Service) http.HandlerFunc {
 			request.Pagination.PageSize = 50
 		}
 		if request.Pagination.Page < 1 || request.Pagination.PageSize < 1 || request.Pagination.PageSize > 200 {
-			http.Error(w, "Invalid pagination", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Invalid pagination")
 			return
 		}
 		if !validateStatExplorerDimensions(request.ReportType, request.Dimensions) {
-			http.Error(w, "One or more dimensions are not allowed for the selected reportType", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "One or more dimensions are not allowed for the selected reportType")
 			return
 		}
 		if !validateStatExplorerMetrics(request.ReportType, request.Metrics) {
-			http.Error(w, "One or more metrics are not allowed for the selected reportType", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "One or more metrics are not allowed for the selected reportType")
 			return
 		}
 
 		result, err := db.RunStatExplorer(r.Context(), league, request)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 

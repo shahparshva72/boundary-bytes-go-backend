@@ -10,15 +10,14 @@ import (
 
 func GetBatters(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
 		batters, err := db.GetBattersByLeague(r.Context(), league)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -43,15 +42,14 @@ func GetBatters(db database.Service) http.HandlerFunc {
 
 func GetBowlers(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
 		bowlers, err := db.GetBowlersByLeague(r.Context(), league)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 

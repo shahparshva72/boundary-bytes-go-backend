@@ -11,15 +11,14 @@ import (
 
 func GetSeasons(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
 		seasons, err := db.GetSeasonsByLeague(r.Context(), league)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -44,15 +43,14 @@ func GetSeasons(db database.Service) http.HandlerFunc {
 
 func GetLatestMatchDate(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
 		latestDate, err := db.GetLatestMatchDate(r.Context(), league)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -74,15 +72,14 @@ func GetLatestMatchDate(db database.Service) http.HandlerFunc {
 
 func GetMatchList(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
 		items, err := db.GetMatchList(r.Context(), league)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -107,9 +104,8 @@ func GetMatchList(db database.Service) http.HandlerFunc {
 
 func GetMatches(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
@@ -135,7 +131,7 @@ func GetMatches(db database.Service) http.HandlerFunc {
 
 		matches, totalCount, seasons, err := db.GetMatches(r.Context(), league, seasonPtr, page, limit)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -172,15 +168,14 @@ func GetMatches(db database.Service) http.HandlerFunc {
 
 func GetTeamWins(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
 		data, err := db.GetTeamWins(r.Context(), league)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -205,15 +200,14 @@ func GetTeamWins(db database.Service) http.HandlerFunc {
 
 func GetTeamAverages(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
 		data, err := db.GetTeamAverages(r.Context(), league)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 

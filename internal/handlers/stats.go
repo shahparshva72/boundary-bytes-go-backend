@@ -12,18 +12,21 @@ import (
 
 func GetMatchup(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
+		league, ok := resolveLeague(w, r)
+		if !ok {
+			return
+		}
 		batter := r.URL.Query().Get("batter")
 		bowler := r.URL.Query().Get("bowler")
 
-		if league == "" || batter == "" || bowler == "" {
-			http.Error(w, "league, batter, and bowler parameters are required", http.StatusBadRequest)
+		if batter == "" || bowler == "" {
+			writeError(w, http.StatusBadRequest, "batter and bowler parameters are required")
 			return
 		}
 
 		stats, err := db.GetMatchupStats(r.Context(), league, batter, bowler)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -52,9 +55,8 @@ func GetMatchup(db database.Service) http.HandlerFunc {
 
 func GetLeadingWicketTakers(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
@@ -76,7 +78,7 @@ func GetLeadingWicketTakers(db database.Service) http.HandlerFunc {
 
 		wicketTakers, totalCount, err := db.GetLeadingWicketTakers(r.Context(), league, page, limit)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -110,9 +112,8 @@ func GetLeadingWicketTakers(db database.Service) http.HandlerFunc {
 
 func GetLeadingRunScorers(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
@@ -134,7 +135,7 @@ func GetLeadingRunScorers(db database.Service) http.HandlerFunc {
 
 		runScorers, totalCount, err := db.GetLeadingRunScorers(r.Context(), league, page, limit)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -168,7 +169,10 @@ func GetLeadingRunScorers(db database.Service) http.HandlerFunc {
 
 func GetPlayerCompare(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
+		league, ok := resolveLeague(w, r)
+		if !ok {
+			return
+		}
 		playersParam := r.URL.Query().Get("players")
 		seasonsParam := r.URL.Query().Get("seasons")
 		team := r.URL.Query().Get("team")
@@ -177,16 +181,12 @@ func GetPlayerCompare(db database.Service) http.HandlerFunc {
 			statType = "both"
 		}
 
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
-			return
-		}
 		if playersParam == "" {
-			http.Error(w, "Players parameter is required", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Players parameter is required")
 			return
 		}
 		if statType != "batting" && statType != "bowling" && statType != "both" {
-			http.Error(w, "Invalid statType: must be batting, bowling, or both", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Invalid statType: must be batting, bowling, or both")
 			return
 		}
 
@@ -205,11 +205,11 @@ func GetPlayerCompare(db database.Service) http.HandlerFunc {
 		}
 
 		if len(players) < 2 {
-			http.Error(w, "At least 2 players are required for comparison", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "At least 2 players are required for comparison")
 			return
 		}
 		if len(players) > 5 {
-			http.Error(w, "Maximum 5 players can be compared", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Maximum 5 players can be compared")
 			return
 		}
 
@@ -223,7 +223,7 @@ func GetPlayerCompare(db database.Service) http.HandlerFunc {
 			}
 		}
 		if len(seasons) > 10 {
-			http.Error(w, "Maximum 10 seasons can be filtered", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Maximum 10 seasons can be filtered")
 			return
 		}
 
@@ -234,7 +234,7 @@ func GetPlayerCompare(db database.Service) http.HandlerFunc {
 
 		comparedPlayers, err := db.GetPlayerCompare(r.Context(), league, players, seasons, teamPtr, statType)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -271,9 +271,8 @@ func GetPlayerCompare(db database.Service) http.HandlerFunc {
 
 func GetRunRateTrend(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
@@ -285,7 +284,7 @@ func GetRunRateTrend(db database.Service) http.HandlerFunc {
 
 		data, err := db.GetRunRateTrend(r.Context(), league, teamPtr)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -311,18 +310,21 @@ func GetRunRateTrend(db database.Service) http.HandlerFunc {
 
 func GetTeamRunRateProgression(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
+		league, ok := resolveLeague(w, r)
+		if !ok {
+			return
+		}
 		team := r.URL.Query().Get("team")
 		season := r.URL.Query().Get("season")
 
-		if league == "" || team == "" || season == "" {
-			http.Error(w, "league, team, and season parameters are required", http.StatusBadRequest)
+		if team == "" || season == "" {
+			writeError(w, http.StatusBadRequest, "team and season parameters are required")
 			return
 		}
 
 		data, metadata, err := db.GetTeamRunRateProgression(r.Context(), league, team, season)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 

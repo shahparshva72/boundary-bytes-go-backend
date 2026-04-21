@@ -13,9 +13,8 @@ import (
 
 func GetBowlingWicketTypes(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
 
@@ -35,7 +34,7 @@ func GetBowlingWicketTypes(db database.Service) http.HandlerFunc {
 
 		data, totalCount, err := db.GetBowlingWicketTypes(r.Context(), league, page, limit)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -68,18 +67,21 @@ func GetBowlingWicketTypes(db database.Service) http.HandlerFunc {
 
 func GetMultiMatchup(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
+		league, ok := resolveLeague(w, r)
+		if !ok {
+			return
+		}
 		player := r.URL.Query().Get("player")
 		opponentsParam := r.URL.Query().Get("opponents")
 		mode := r.URL.Query().Get("mode")
 
-		if league == "" || player == "" || opponentsParam == "" || mode == "" {
-			http.Error(w, "league, player, opponents, and mode parameters are required", http.StatusBadRequest)
+		if player == "" || opponentsParam == "" || mode == "" {
+			writeError(w, http.StatusBadRequest, "player, opponents, and mode parameters are required")
 			return
 		}
 
 		if mode != "batterVsBowlers" && mode != "bowlerVsBatters" {
-			http.Error(w, "mode must be either \"batterVsBowlers\" or \"bowlerVsBatters\"", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "mode must be either \"batterVsBowlers\" or \"bowlerVsBatters\"")
 			return
 		}
 
@@ -89,13 +91,13 @@ func GetMultiMatchup(db database.Service) http.HandlerFunc {
 		}
 
 		if len(opponents) > 5 {
-			http.Error(w, "Maximum 5 opponents allowed", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Maximum 5 opponents allowed")
 			return
 		}
 
 		results, err := db.GetMultiMatchup(r.Context(), league, player, opponents, mode)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -148,12 +150,15 @@ func GetMultiMatchup(db database.Service) http.HandlerFunc {
 
 func GetPlayerProgression(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
+		league, ok := resolveLeague(w, r)
+		if !ok {
+			return
+		}
 		player := r.URL.Query().Get("player")
 		inningsParam := r.URL.Query().Get("innings")
 
-		if league == "" || player == "" {
-			http.Error(w, "league and player parameters are required", http.StatusBadRequest)
+		if player == "" {
+			writeError(w, http.StatusBadRequest, "player parameter is required")
 			return
 		}
 
@@ -162,14 +167,14 @@ func GetPlayerProgression(db database.Service) http.HandlerFunc {
 			if inningsValue, err := strconv.Atoi(inningsParam); err == nil {
 				inningsPtr = &inningsValue
 			} else {
-				http.Error(w, "Invalid innings parameter", http.StatusBadRequest)
+				writeError(w, http.StatusBadRequest, "Invalid innings parameter")
 				return
 			}
 		}
 
 		data, metadata, err := db.GetPlayerProgression(r.Context(), league, player, inningsPtr)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -199,7 +204,10 @@ func GetPlayerProgression(db database.Service) http.HandlerFunc {
 
 func GetAdvancedStats(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
+		league, ok := resolveLeague(w, r)
+		if !ok {
+			return
+		}
 		oversParam := r.URL.Query().Get("overs")
 		batter := r.URL.Query().Get("batter")
 		bowler := r.URL.Query().Get("bowler")
@@ -208,16 +216,12 @@ func GetAdvancedStats(db database.Service) http.HandlerFunc {
 			playerType = "batter"
 		}
 
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
-			return
-		}
 		if oversParam == "" {
-			http.Error(w, "overs parameter is required", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "overs parameter is required")
 			return
 		}
 		if batter == "" && bowler == "" {
-			http.Error(w, "Either batter or bowler must be specified", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Either batter or bowler must be specified")
 			return
 		}
 
@@ -225,7 +229,7 @@ func GetAdvancedStats(db database.Service) http.HandlerFunc {
 		for _, value := range strings.Split(oversParam, ",") {
 			over, err := strconv.Atoi(strings.TrimSpace(value))
 			if err != nil {
-				http.Error(w, "Invalid over numbers provided", http.StatusBadRequest)
+				writeError(w, http.StatusBadRequest, "Invalid over numbers provided")
 				return
 			}
 			overs = append(overs, over)
@@ -238,7 +242,7 @@ func GetAdvancedStats(db database.Service) http.HandlerFunc {
 
 		data, deliveryCount, err := db.GetAdvancedStats(r.Context(), league, playerType, player, overs)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -266,26 +270,25 @@ func GetAdvancedStats(db database.Service) http.HandlerFunc {
 
 func GetFallOfWickets(db database.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		league := r.URL.Query().Get("league")
-		matchParam := chi.URLParam(r, "matchId")
-
-		if league == "" {
-			http.Error(w, "league parameter is required", http.StatusBadRequest)
+		league, ok := resolveLeague(w, r)
+		if !ok {
 			return
 		}
+		matchParam := chi.URLParam(r, "matchId")
+
 		matchID, err := strconv.Atoi(matchParam)
 		if err != nil {
-			http.Error(w, "Invalid match ID", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Invalid match ID")
 			return
 		}
 
 		data, err := db.GetFallOfWickets(r.Context(), league, matchID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if data == nil {
-			http.Error(w, "Match not found in league", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "Match not found in league")
 			return
 		}
 

@@ -27,7 +27,7 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Port: getEnv("PORT", "3000"),
+		Port: getEnv("PORT", "8080"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),
