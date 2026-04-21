@@ -8,31 +8,19 @@ on:
 env:
   REGION: ${{ vars.GCP_REGION || 'us-central1' }}
   SERVICE_NAME: boundary-bytes-api
-  IMAGE: ghcr.io/${{ github.repository }}/boundary-bytes-api
+  REPO: boundary-bytes-api
+  IMAGE: boundary-bytes-api
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
       id-token: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push Container Image
-        run: |
-          docker build -t ${{ env.IMAGE }}:${{ github.sha }} .
-          docker push ${{ env.IMAGE }}:${{ github.sha }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
@@ -43,10 +31,18 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build and Push Container Image
+        run: |
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:${{ github.sha }} .
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:${{ github.sha }}
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image=${{ env.IMAGE }}:${{ github.sha }} \
+            --image=${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:${{ github.sha }} \
             --region=${{ env.REGION }} \
             --platform=managed \
             --port=8080 \
