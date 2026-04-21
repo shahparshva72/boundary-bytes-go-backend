@@ -19,6 +19,7 @@ type DBConfig struct {
 	User     string
 	Password string
 	Name     string
+	SSLMode  string
 }
 
 func Load() *Config {
@@ -34,13 +35,14 @@ func Load() *Config {
 			User:     getEnv("DB_USER", "postgres"),
 			Password: getEnv("DB_PASSWORD", "postgres"),
 			Name:     getEnv("DB_NAME", "boundary_bytes"),
+			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 	}
 }
 
 func (c *Config) DBConnectionURL() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		c.DB.User, c.DB.Password, c.DB.Host, c.DB.Port, c.DB.Name)
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		c.DB.User, c.DB.Password, c.DB.Host, c.DB.Port, c.DB.Name, c.DB.SSLMode)
 }
 
 func getEnv(key, fallback string) string {

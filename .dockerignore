@@ -1,0 +1,13 @@
+bin/
+tmp/
+.env
+.env.*
+.git
+.github
+.DS_Store
+*.md
+docs/
+migrations/
+.air.toml
+.vscode/
+.idea/
