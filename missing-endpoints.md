@@ -93,20 +93,20 @@ Reason: this has the most external dependencies, security constraints, and movin
 - [x] `GET /api/stats/leading-wicket-takers`
 - [x] `GET /api/stats/leading-run-scorers`
 
-## Remaining Unmigrated Endpoints
+## Previously Unmigrated Endpoints
 
-### Higher Effort
+### Higher Effort, Now Migrated
 
-- [ ] `GET /api/ai/feedback`
+- [x] `GET /api/ai/feedback`
   Requires AI request log storage and aggregate accuracy stats.
 
-- [ ] `POST /api/ai/feedback`
+- [x] `POST /api/ai/feedback`
   Requires request lookup, feedback persistence, conflict handling, and structured validation.
 
-- [ ] `POST /api/text-to-sql`
+- [x] `POST /api/text-to-sql`
   Largest migration item. Depends on Gemini SQL generation, SQL validation, safe query execution, result formatting, request logging, and team-result normalization.
 
-- [ ] `OPTIONS /api/text-to-sql`
+- [x] `OPTIONS /api/text-to-sql`
   Needed for the current CORS behavior used by the Next.js route.
 
 ## SQL Migration Status

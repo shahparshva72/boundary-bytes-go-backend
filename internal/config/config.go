@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -11,6 +13,7 @@ import (
 type Config struct {
 	Port string
 	DB   DBConfig
+	AI   AIConfig
 }
 
 type DBConfig struct {
@@ -20,6 +23,12 @@ type DBConfig struct {
 	Password string
 	Name     string
 	SSLMode  string
+}
+
+type AIConfig struct {
+	GoogleAPIKey string
+	GeminiModel  string
+	Timeout      time.Duration
 }
 
 func Load() *Config {
@@ -37,6 +46,11 @@ func Load() *Config {
 			Name:     getEnv("DB_NAME", "boundary_bytes"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
+		AI: AIConfig{
+			GoogleAPIKey: getEnv("GOOGLE_GENERATIVE_AI_API_KEY", ""),
+			GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash"),
+			Timeout:      time.Duration(getEnvInt("AI_TIMEOUT_SECONDS", 20)) * time.Second,
+		},
 	}
 }
 
@@ -50,4 +64,18 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	value, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
 }
