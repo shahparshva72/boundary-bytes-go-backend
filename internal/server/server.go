@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/database"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/handlers"
 )
@@ -25,11 +26,12 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 type Server struct {
-	Router *chi.Mux
-	DB     database.Service
+	Router       *chi.Mux
+	DB           database.Service
+	SQLGenerator ai.SQLGenerator
 }
 
-func NewServer(db database.Service) *Server {
+func NewServer(db database.Service, sqlGenerator ai.SQLGenerator) *Server {
 	r := chi.NewRouter()
 
 	// Default chi middleware
@@ -65,10 +67,14 @@ func NewServer(db database.Service) *Server {
 	r.Get("/api/stats/leading-wicket-takers", handlers.GetLeadingWicketTakers(db))
 	r.Get("/api/stats/leading-run-scorers", handlers.GetLeadingRunScorers(db))
 	r.Get("/api/news", handlers.GetNews)
+	r.Get("/api/ai/feedback", handlers.GetAIFeedbackStats(db))
+	r.Post("/api/ai/feedback", handlers.SubmitAIFeedback(db))
+	r.Post("/api/text-to-sql", handlers.TextToSQL(db, sqlGenerator))
 
 	return &Server{
-		Router: r,
-		DB:     db,
+		Router:       r,
+		DB:           db,
+		SQLGenerator: sqlGenerator,
 	}
 }
 

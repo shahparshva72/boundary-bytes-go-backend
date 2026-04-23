@@ -101,3 +101,45 @@ type AIChatRequest struct {
 	FeedbackAt        time.Time `json:"feedback_at"`
 	CreatedAt         time.Time `json:"created_at"`
 }
+
+type AIChatRequestRecord struct {
+	ID                string     `json:"id"`
+	Question          string     `json:"question"`
+	SanitizedQuestion *string    `json:"sanitized_question,omitempty"`
+	League            *string    `json:"league,omitempty"`
+	GeneratedSQL      *string    `json:"generated_sql,omitempty"`
+	RowCount          *int       `json:"row_count,omitempty"`
+	ExecutionTimeMS   *int       `json:"execution_time_ms,omitempty"`
+	Success           bool       `json:"success"`
+	ErrorCode         *string    `json:"error_code,omitempty"`
+	ErrorMessage      *string    `json:"error_message,omitempty"`
+	IsAccurate        *bool      `json:"is_accurate,omitempty"`
+	FeedbackNote      *string    `json:"feedback_note,omitempty"`
+	FeedbackAt        *time.Time `json:"feedback_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
+
+type LogAIRequestParams struct {
+	Question          string
+	SanitizedQuestion *string
+	League            *string
+	GeneratedSQL      *string
+	RowCount          *int
+	ExecutionTimeMS   *int
+	Success           bool
+	ErrorCode         *string
+	ErrorMessage      *string
+}
+
+type AIFeedbackStats struct {
+	Total        int     `json:"total"`
+	Accurate     int     `json:"accurate"`
+	Inaccurate   int     `json:"inaccurate"`
+	AccuracyRate float64 `json:"accuracyRate"`
+}
+
+type AIQueryResult struct {
+	Data            []map[string]interface{} `json:"data"`
+	RowCount        int                      `json:"rowCount"`
+	ExecutionTimeMS int                      `json:"executionTimeMs"`
+}

@@ -36,6 +36,11 @@ type Service interface {
 	GetMatchupStats(ctx context.Context, league, batter, bowler string) (*models.MatchupData, error)
 	GetLeadingWicketTakers(ctx context.Context, league string, page, limit int) ([]models.WicketTaker, int, error)
 	GetLeadingRunScorers(ctx context.Context, league string, page, limit int) ([]models.RunScorer, int, error)
+	LogAIRequest(ctx context.Context, params models.LogAIRequestParams) (string, error)
+	GetAIRequestByID(ctx context.Context, id string) (*models.AIChatRequestRecord, error)
+	MarkAIRequestAccuracy(ctx context.Context, requestID string, isAccurate bool, feedbackNote *string) error
+	GetAIAccuracyStats(ctx context.Context) (models.AIFeedbackStats, error)
+	ExecuteAIQuery(ctx context.Context, query string) (models.AIQueryResult, error)
 }
 
 type service struct {
