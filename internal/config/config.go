@@ -47,7 +47,7 @@ func Load() *Config {
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		AI: AIConfig{
-			GoogleAPIKey: getEnv("GOOGLE_GENERATIVE_AI_API_KEY", ""),
+			GoogleAPIKey: getEnv("GOOGLE_API_KEY", ""),
 			GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash"),
 			Timeout:      time.Duration(getEnvInt("AI_TIMEOUT_SECONDS", 20)) * time.Second,
 		},

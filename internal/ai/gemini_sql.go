@@ -149,7 +149,7 @@ func (s *GeminiSQLService) GenerateSQL(ctx context.Context, question string) ([]
 	return queries, nil
 }
 
-var ErrMissingAPIKey = errors.New("missing GOOGLE_GENERATIVE_AI_API_KEY")
+var ErrMissingAPIKey = errors.New("missing GOOGLE_API_KEY")
 
 type geminiGenerateRequest struct {
 	SystemInstruction geminiContent          `json:"systemInstruction,omitempty"`
