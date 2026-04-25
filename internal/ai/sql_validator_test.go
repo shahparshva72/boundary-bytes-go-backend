@@ -49,3 +49,37 @@ func TestValidateSQLAllowsCTEs(t *testing.T) {
 		t.Fatalf("expected CTE query to be valid, got: %v", result.Errors)
 	}
 }
+
+func TestValidateSQLAllowsPlayerStyleJoins(t *testing.T) {
+	result := ValidateSQL(`
+		SELECT d.striker, SUM(d.runs_off_bat) AS runs
+		FROM wpl_delivery d
+		JOIN wpl_match m ON m.match_id = d.match_id
+		JOIN wpl_person_registry pr ON pr.match_id = d.match_id AND pr.person_name = d.bowler
+		JOIN player_style ps ON ps.identifier = pr.registry_id
+		WHERE m.league = 'IPL'
+			AND d.innings <= 2
+			AND ps.bowling_type = 'spin'
+		GROUP BY d.striker
+		LIMIT 20
+	`)
+	if !result.IsValid {
+		t.Fatalf("expected player_style query to be valid, got: %v", result.Errors)
+	}
+}
+
+func TestMinimalValidateAndNormalizeAllowsPlayerStyleJoins(t *testing.T) {
+	query, err := MinimalValidateAndNormalize(`
+		SELECT d.striker
+		FROM wpl_delivery d
+		JOIN wpl_person_registry pr ON pr.match_id = d.match_id AND pr.person_name = d.bowler
+		JOIN player_style ps ON ps.identifier = pr.registry_id
+		WHERE ps.bowling_sub_type IN ('left-arm-orthodox', 'left-arm-wrist-spin')
+	`)
+	if err != nil {
+		t.Fatalf("expected player_style query to normalize, got error: %v", err)
+	}
+	if query == "" {
+		t.Fatal("expected normalized query")
+	}
+}

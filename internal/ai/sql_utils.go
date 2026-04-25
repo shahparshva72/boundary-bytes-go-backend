@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var playerLookupPattern = regexp.MustCompile(`(?i)select\s+player_name\s+from\s+wpl_player`)
+var playerLookupPattern = regexp.MustCompile(`(?i)select\s+(?:player_name|(?:ps\.)?name\s+as\s+player_name)\s+from\s+(?:wpl_player|player_style)\b`)
 
 type ResolvedNames struct {
 	BatterName string
