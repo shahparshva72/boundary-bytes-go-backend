@@ -53,6 +53,28 @@ func (s *service) LogAIRequest(ctx context.Context, params models.LogAIRequestPa
 	return id, nil
 }
 
+func (s *service) GetCachedAIQuery(ctx context.Context, sanitizedQuestion string) (*string, error) {
+	query := `
+		SELECT generated_sql
+		FROM ai_chat_request
+		WHERE sanitized_question = $1
+			AND success IS TRUE
+			AND generated_sql IS NOT NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	var generatedSQL string
+	if err := s.db.QueryRowContext(ctx, query, sanitizedQuestion).Scan(&generatedSQL); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &generatedSQL, nil
+}
+
 func (s *service) GetAIRequestByID(ctx context.Context, id string) (*models.AIChatRequestRecord, error) {
 	query := `
 		SELECT

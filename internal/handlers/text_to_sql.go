@@ -55,20 +55,26 @@ func TextToSQL(db database.Service, generator aisql.SQLGenerator) http.HandlerFu
 		}
 
 		sanitizedQuestion := sanitizeTextToSQLQuestion(body.Question)
-		rawGeneratedQueries, err := generator.GenerateSQL(r.Context(), sanitizedQuestion)
-		if err != nil {
-			errorMessage := err.Error()
-			logAIRequest(r.Context(), db, models.LogAIRequestParams{
-				Question:          body.Question,
-				SanitizedQuestion: &sanitizedQuestion,
-				Success:           false,
-				ErrorCode:         stringPtr("SQL_GENERATION_ERROR"),
-				ErrorMessage:      &errorMessage,
-			})
+		rawGeneratedQueries := []string{}
+		cachedSQL, err := db.GetCachedAIQuery(r.Context(), sanitizedQuestion)
+		if err == nil && cachedSQL != nil {
+			rawGeneratedQueries = []string{*cachedSQL}
+		} else {
+			rawGeneratedQueries, err = generator.GenerateSQL(r.Context(), sanitizedQuestion)
+			if err != nil {
+				errorMessage := err.Error()
+				logAIRequest(r.Context(), db, models.LogAIRequestParams{
+					Question:          body.Question,
+					SanitizedQuestion: &sanitizedQuestion,
+					Success:           false,
+					ErrorCode:         stringPtr("SQL_GENERATION_ERROR"),
+					ErrorMessage:      &errorMessage,
+				})
 
-			status, payload := classifyAIGenerationError(errorMessage, sanitizedQuestion)
-			writeJSON(w, status, payload)
-			return
+				status, payload := classifyAIGenerationError(errorMessage, sanitizedQuestion)
+				writeJSON(w, status, payload)
+				return
+			}
 		}
 
 		if len(rawGeneratedQueries) > 1 {

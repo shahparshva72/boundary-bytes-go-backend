@@ -50,6 +50,7 @@ var allowedSQLTables = map[string]struct{}{
 	"wpl_team":            {},
 	"wpl_official":        {},
 	"wpl_person_registry": {},
+	"player_style":        {},
 }
 
 var forbiddenSQLPatterns = []*regexp.Regexp{
