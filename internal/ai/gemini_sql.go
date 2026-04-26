@@ -257,6 +257,7 @@ CURRENT DATE AND RELATIVE TIME:
 - "last X years": m.start_date >= (DATE_TRUNC('year', CURRENT_DATE) - (INTERVAL '1 year' * X)) AND m.start_date <= CURRENT_DATE.
 - "last X months": m.start_date >= (CURRENT_DATE - (INTERVAL '1 month' * X)) AND m.start_date <= CURRENT_DATE.
 - Fixed years such as 2018-2020: m.start_date >= '2018-01-01' AND m.start_date <= '2020-12-31'.
+- Prioritise using start_date over season for date based filtering except for BBL and SA20
 - Use m.start_date, never season text, for ordinary date filters.
 
 BBL SEASON HANDLING:
@@ -372,18 +373,12 @@ Use a batter-innings CTE grouped by match_id, innings, striker to detect runs=0 
 PLAYER NAME RESOLUTION:
 If a specific player is referenced, generate two queries:
 1. Lookup:
-SELECT ps.name AS player_name
-FROM player_style ps
-WHERE ps.name ILIKE '%{surname}%'
-  OR ps.full_name ILIKE '%{full_or_surname}%'
-ORDER BY CASE
-  WHEN ps.full_name ILIKE '{full_name}' THEN 1
-  WHEN ps.name ILIKE '{initial}%{surname}' THEN 2
-  WHEN ps.full_name ILIKE '%{surname}%' THEN 3
-  ELSE 4
-END
+SELECT player_name
+FROM wpl_player
+WHERE player_name ILIKE '%{surname}%'
+ORDER BY CASE WHEN player_name ILIKE '{initial}%{surname}' THEN 1 ELSE 2 END
 LIMIT 1;
-2. Stats query using the literal placeholder 'RESOLVED_PLAYER_NAME'. The lookup must return player_style.name because delivery tables store short names like 'V Kohli', not full names like 'Virat Kohli'. Do not guess full names.
+2. Stats query using the literal placeholder 'RESOLVED_PLAYER_NAME'. Do not guess full names.
 
 HEAD-TO-HEAD:
 Generate three queries: batter lookup, bowler lookup, final stats query using 'RESOLVED_BATTER_NAME' and 'RESOLVED_BOWLER_NAME'.
