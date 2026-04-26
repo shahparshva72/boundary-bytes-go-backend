@@ -47,6 +47,7 @@ func NewServer(db database.Service, sqlGenerator ai.SQLGenerator) *Server {
 	r.Get("/db-health", handlers.DBHealthCheck(db))
 	r.Get("/api/players/batters", handlers.GetBatters(db))
 	r.Get("/api/players/bowlers", handlers.GetBowlers(db))
+	r.Get("/api/leagues/config", handlers.GetLeagueConfigs(db))
 	r.Get("/api/stats/seasons", handlers.GetSeasons(db))
 	r.Get("/api/stats/latest-match-date", handlers.GetLatestMatchDate(db))
 	r.Get("/api/matches/list", handlers.GetMatchList(db))

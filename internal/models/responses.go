@@ -91,6 +91,22 @@ type LatestMatchDateResponse struct {
 	LatestDate *string `json:"latestDate"`
 }
 
+type LeagueConfigStats struct {
+	Teams   int      `json:"teams"`
+	Matches int      `json:"matches"`
+	Players int      `json:"players"`
+	Seasons []string `json:"seasons"`
+}
+
+type LeagueConfigItem struct {
+	League string            `json:"league"`
+	Stats  LeagueConfigStats `json:"stats"`
+}
+
+type LeagueConfigsResponse struct {
+	Data []LeagueConfigItem `json:"data"`
+}
+
 type RunRateTrendItem struct {
 	Season     string  `json:"season"`
 	AvgRunRate float64 `json:"avgRunRate"`

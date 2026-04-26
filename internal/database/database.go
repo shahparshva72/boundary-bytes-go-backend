@@ -17,6 +17,7 @@ type Service interface {
 	GetBattersByLeague(ctx context.Context, league string) ([]string, error)
 	GetBowlersByLeague(ctx context.Context, league string) ([]string, error)
 	GetAllLeagues(ctx context.Context) ([]string, error)
+	GetLeagueConfigStats(ctx context.Context) ([]models.LeagueConfigItem, error)
 	GetSeasonsByLeague(ctx context.Context, league string) ([]string, error)
 	GetLatestMatchDate(ctx context.Context, league string) (*time.Time, error)
 	GetMatchList(ctx context.Context, league string) ([]models.MatchListItem, error)
