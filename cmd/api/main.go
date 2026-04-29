@@ -4,32 +4,19 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
-	"github.com/shahparshva72/boundary-bytes-go-backend/internal/config"
-	"github.com/shahparshva72/boundary-bytes-go-backend/internal/database"
-	"github.com/shahparshva72/boundary-bytes-go-backend/internal/server"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/app"
 )
 
 func main() {
-	cfg := config.Load()
-
-	db, err := database.New(cfg.DBConnectionURL())
+	application, err := app.New()
 	if err != nil {
-		log.Fatalf("failed to initialize database: %v", err)
+		log.Fatalf("failed to initialize application: %v", err)
 	}
-	defer db.Close()
+	defer application.Close()
 
-	sqlGenerator := ai.NewGeminiSQLService(ai.GeminiSQLConfig{
-		APIKey:  cfg.AI.GoogleAPIKey,
-		Model:   cfg.AI.GeminiModel,
-		Timeout: cfg.AI.Timeout,
-	})
+	fmt.Printf("Server starting on :%s\n", application.Port())
 
-	srv := server.NewServer(db, sqlGenerator)
-
-	fmt.Printf("Server starting on :%s\n", cfg.Port)
-
-	if err := srv.Start(cfg.Port); err != nil {
+	if err := application.Run(); err != nil {
 		log.Fatalf("could not start server: %v", err)
 	}
 }
