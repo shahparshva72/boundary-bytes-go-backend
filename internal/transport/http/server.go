@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -25,9 +26,10 @@ type Dependencies struct {
 }
 
 type Server struct {
-	Router       *chi.Mux
-	DB           postgres.Service
-	SQLGenerator ai.SQLGenerator
+	httpServer    *http.Server
+	Router        *chi.Mux
+	DB            postgres.Service
+	SQLGenerator  ai.SQLGenerator
 }
 
 func New(deps Dependencies) *Server {
@@ -87,7 +89,18 @@ func New(deps Dependencies) *Server {
 }
 
 func (s *Server) Start(port string) error {
-	return http.ListenAndServe(":"+port, s.Router)
+	s.httpServer = &http.Server{
+		Addr:    ":" + port,
+		Handler: s.Router,
+	}
+	return s.httpServer.ListenAndServe()
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpServer == nil {
+		return nil
+	}
+	return s.httpServer.Shutdown(ctx)
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

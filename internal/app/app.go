@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
@@ -49,7 +50,21 @@ func (a *App) Run() error {
 	return a.server.Start(a.config.Port)
 }
 
-func (a *App) Close() error {
+func (a *App) Shutdown(ctx context.Context) error {
+	var errs []error
+	if err := a.server.Shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("shutdown http server: %w", err))
+	}
+	if err := a.closeDB(); err != nil {
+		errs = append(errs, fmt.Errorf("close database: %w", err))
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("shutdown errors: %v", errs)
+	}
+	return nil
+}
+
+func (a *App) closeDB() error {
 	if a.db == nil {
 		return nil
 	}
