@@ -43,14 +43,15 @@ var dangerousSQLKeywords = []string{
 }
 
 var allowedSQLTables = map[string]struct{}{
-	"wpl_match":           {},
-	"wpl_delivery":        {},
-	"wpl_match_info":      {},
-	"wpl_player":          {},
-	"wpl_team":            {},
-	"wpl_official":        {},
-	"wpl_person_registry": {},
-	"player_style":        {},
+	"wpl_match":            {},
+	"wpl_delivery":         {},
+	"wpl_match_info":       {},
+	"wpl_player":           {},
+	"wpl_team":             {},
+	"wpl_official":         {},
+	"wpl_batting_position": {},
+	"wpl_person_registry":  {},
+	"player_style":         {},
 }
 
 var forbiddenSQLPatterns = []*regexp.Regexp{

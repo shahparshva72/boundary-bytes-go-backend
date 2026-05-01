@@ -13,3 +13,15 @@ func TestTotalPagesWithInvalidLimit(t *testing.T) {
 		t.Fatalf("totalPages() = %d, want 0", got)
 	}
 }
+
+func TestValidateBattingPositions(t *testing.T) {
+	if err := validateBattingPositions([]int{1, 3, 11}); err != nil {
+		t.Fatalf("validateBattingPositions() error = %v", err)
+	}
+}
+
+func TestValidateBattingPositionsRejectsOutOfRange(t *testing.T) {
+	if err := validateBattingPositions([]int{0}); err != ErrInvalidBattingPosition {
+		t.Fatalf("validateBattingPositions() error = %v, want %v", err, ErrInvalidBattingPosition)
+	}
+}

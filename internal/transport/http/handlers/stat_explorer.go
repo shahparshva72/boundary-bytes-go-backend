@@ -97,5 +97,7 @@ func isStatExplorerValidationError(err error) bool {
 		errors.Is(err, statsexplorerservice.ErrInvalidSortDirection) ||
 		errors.Is(err, statsexplorerservice.ErrInvalidPagination) ||
 		errors.Is(err, statsexplorerservice.ErrDisallowedDimensions) ||
-		errors.Is(err, statsexplorerservice.ErrDisallowedMetrics)
+		errors.Is(err, statsexplorerservice.ErrDisallowedMetrics) ||
+		errors.Is(err, statsexplorerservice.ErrInvalidBattingPositions) ||
+		errors.Is(err, statsexplorerservice.ErrDisallowedBattingPositions)
 }

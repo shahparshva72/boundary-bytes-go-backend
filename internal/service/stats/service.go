@@ -2,13 +2,16 @@ package stats
 
 import (
 	"context"
+	"errors"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
+var ErrInvalidBattingPosition = errors.New("batting position must be between 1 and 11")
+
 type Repository interface {
 	GetAllLeagues(ctx context.Context) ([]string, error)
-	GetLeadingRunScorers(ctx context.Context, league string, page, limit int) ([]models.RunScorer, int, error)
+	GetLeadingRunScorers(ctx context.Context, league string, page, limit int, battingPositions []int) ([]models.RunScorer, int, error)
 	GetLeadingWicketTakers(ctx context.Context, league string, page, limit int) ([]models.WicketTaker, int, error)
 	GetMatchupStats(ctx context.Context, league, batter, bowler string) (*models.MatchupData, error)
 	GetPlayerCompare(ctx context.Context, league string, players []string, seasons []string, team *string, statType string) ([]models.PlayerComparePlayer, error)
@@ -84,8 +87,12 @@ func (s *Service) GetLeadingWicketTakers(ctx context.Context, league string, pag
 	}, nil
 }
 
-func (s *Service) GetLeadingRunScorers(ctx context.Context, league string, page, limit int) (*PaginatedRunScorersResult, error) {
-	items, totalCount, err := s.repository.GetLeadingRunScorers(ctx, league, page, limit)
+func (s *Service) GetLeadingRunScorers(ctx context.Context, league string, page, limit int, battingPositions []int) (*PaginatedRunScorersResult, error) {
+	if err := validateBattingPositions(battingPositions); err != nil {
+		return nil, err
+	}
+
+	items, totalCount, err := s.repository.GetLeadingRunScorers(ctx, league, page, limit, battingPositions)
 	if err != nil {
 		return nil, err
 	}
@@ -95,6 +102,15 @@ func (s *Service) GetLeadingRunScorers(ctx context.Context, league string, page,
 		TotalPages: totalPages(totalCount, limit),
 		Leagues:    s.availableLeagues(ctx),
 	}, nil
+}
+
+func validateBattingPositions(positions []int) error {
+	for _, position := range positions {
+		if position < 1 || position > 11 {
+			return ErrInvalidBattingPosition
+		}
+	}
+	return nil
 }
 
 func (s *Service) GetPlayerCompare(ctx context.Context, league string, players []string, seasons []string, team *string, statType string) (*PlayerCompareResult, error) {

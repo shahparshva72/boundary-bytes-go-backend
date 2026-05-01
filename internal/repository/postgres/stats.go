@@ -602,6 +602,7 @@ func (s *service) GetStatExplorerOptions(
 			"wicketkeeper_batter",
 			"wicketkeeper",
 		},
+		BattingPositions: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
 	}, nil
 }
 
@@ -1291,7 +1292,29 @@ func overFromBall(ball string, allowed map[int]bool) bool {
 
 func statExplorerAllowedDimensions(reportType string) []string {
 	switch reportType {
-	case "batting", "bowling":
+	case "batting":
+		return []string{
+			"season",
+			"player",
+			"team",
+			"opposition",
+			"venue",
+			"city",
+			"tossWinner",
+			"tossDecision",
+			"result",
+			"date",
+			"innings",
+			"battingHand",
+			"bowlingType",
+			"bowlingSubType",
+			"opponentBattingHand",
+			"opponentBowlingType",
+			"opponentBowlingSubType",
+			"playingRole",
+			"battingPosition",
+		}
+	case "bowling":
 		return []string{
 			"season",
 			"player",
