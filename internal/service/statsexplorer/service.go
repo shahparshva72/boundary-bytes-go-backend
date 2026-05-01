@@ -49,7 +49,14 @@ func (s *Service) Options(ctx context.Context, league, reportType string) (model
 	if !IsValidReportType(reportType) {
 		return models.StatExplorerFilterOptions{}, ErrInvalidReportType
 	}
-	return s.repository.GetStatExplorerOptions(ctx, league, reportType)
+	options, err := s.repository.GetStatExplorerOptions(ctx, league, reportType)
+	if err != nil {
+		return models.StatExplorerFilterOptions{}, err
+	}
+	if reportType != "batting" {
+		options.BattingPositions = []int{}
+	}
+	return options, nil
 }
 
 func (s *Service) Run(ctx context.Context, league string, request models.StatExplorerRunRequest) (*RunResult, error) {
