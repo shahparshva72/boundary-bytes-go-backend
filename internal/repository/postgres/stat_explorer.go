@@ -29,6 +29,7 @@ var statExplorerDimensionLabels = map[string]string{
 	"opponentbowlingtype":    "Opponent Bowling Type",
 	"opponentbowlingsubtype": "Opponent Bowling Sub-Type",
 	"playingrole":            "Playing Role",
+	"battingposition":        "Batting Position",
 }
 
 var statExplorerMetricLabels = map[string]string{
@@ -225,6 +226,7 @@ func buildBattingBowlingQueries(
 	needsPrimaryPlayerStyle := hasPrimaryStyleDim || hasPrimaryStyleFilter
 	needsOpponentPlayerStyle := hasOpponentStyleDim || hasOpponentStyleFilter
 	needsPlayerStyle := needsPrimaryPlayerStyle || needsOpponentPlayerStyle
+	needsBattingPosition := !isBowling && (containsString(request.Dimensions, "battingPosition") || len(request.Filters.BattingPositions) > 0)
 
 	playerStyleLookupCTE := ""
 	if needsPlayerStyle {
@@ -290,6 +292,19 @@ func buildBattingBowlingQueries(
 			opponentJoinSQL = "LEFT JOIN player_style_lookup opponent_psl ON opponent_psl.person_name = d.bowler"
 		}
 	}
+	battingPositionJoinSQL := ""
+	if needsBattingPosition {
+		battingPositionJoinSQL = `JOIN wpl_batting_position bp
+				ON bp.match_id = d.match_id
+				AND bp.innings = d.innings
+				AND bp.batting_team = d.batting_team
+				AND bp.player_name = d.striker`
+	}
+
+	battingPositionFilterSQL := ""
+	if len(request.Filters.BattingPositions) > 0 {
+		battingPositionFilterSQL = fmt.Sprintf("AND bp.batting_position IN %s", builder.intInClause(request.Filters.BattingPositions))
+	}
 
 	primarySelectSQL := ""
 	if needsPrimaryPlayerStyle {
@@ -298,6 +313,11 @@ func buildBattingBowlingQueries(
 			MAX(primary_psl.bowling_type) AS bowling_type,
 			MAX(primary_psl.bowling_sub_type) AS bowling_sub_type,
 			MAX(primary_psl.playing_role) AS playing_role`
+	}
+	battingPositionSelectSQL := ""
+	if needsBattingPosition {
+		battingPositionSelectSQL = `,
+				MAX(bp.batting_position) AS batting_position`
 	}
 
 	opponentDimensionSelects := []string{}
@@ -383,6 +403,9 @@ func buildBattingBowlingQueries(
 		case "playingRole":
 			groupByParts = append(groupByParts, "stats.playing_role")
 			selectDimParts = append(selectDimParts, `stats.playing_role AS "playingRole"`)
+		case "battingPosition":
+			groupByParts = append(groupByParts, "stats.batting_position")
+			selectDimParts = append(selectDimParts, `stats.batting_position AS "battingPosition"`)
 		}
 		sortColumns[strings.ToLower(dimension)] = statExplorerSortColumnForDimension(dimension)
 	}
@@ -452,16 +475,18 @@ func buildBattingBowlingQueries(
 				COUNT(*) FILTER (WHERE d.runs_off_bat = 4) AS fours,
 				COUNT(*) FILTER (WHERE d.runs_off_bat = 6) AS sixes,
 				COUNT(*) FILTER (WHERE d.runs_off_bat = 0 AND d.wides = 0 AND d.noballs = 0) AS dot_balls,
-				MAX(CASE WHEN d.player_dismissed = d.striker AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out', 'retired out', 'obstructing the field', 'hit the ball twice', 'handled the ball', 'timed out') THEN 1 ELSE 0 END) AS is_dismissed%s%s
+				MAX(CASE WHEN d.player_dismissed = d.striker AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out', 'retired out', 'obstructing the field', 'hit the ball twice', 'handled the ball', 'timed out') THEN 1 ELSE 0 END) AS is_dismissed%s%s%s
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			LEFT JOIN wpl_match_info mi ON m.match_id = mi.match_id
 			%s
 			%s
+			%s
 			WHERE %s
 				%s
+				%s
 			GROUP BY d.match_id, d.innings, d.striker%s
-		)`, standardizedBattingTeamSQL, primarySelectSQL, opponentSelectSQL, primaryJoinSQL, opponentJoinSQL, whereClause, playerStyleFilterSQL, opponentGroupBySQL)
+		)`, standardizedBattingTeamSQL, primarySelectSQL, opponentSelectSQL, battingPositionSelectSQL, primaryJoinSQL, opponentJoinSQL, battingPositionJoinSQL, whereClause, playerStyleFilterSQL, battingPositionFilterSQL, opponentGroupBySQL)
 	}
 
 	ctes := []string{}

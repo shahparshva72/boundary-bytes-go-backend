@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
@@ -195,10 +196,28 @@ func (s *service) GetLeadingWicketTakers(ctx context.Context, league string, pag
 	return wicketTakers, totalCount, nil
 }
 
-func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page, limit int) ([]models.RunScorer, int, error) {
+func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page, limit int, battingPositions []int) ([]models.RunScorer, int, error) {
 	offset := (page - 1) * limit
+	args := []interface{}{league}
+	battingPositionJoin := ""
+	battingPositionWhere := ""
+	if len(battingPositions) > 0 {
+		battingPositionJoin = `JOIN wpl_batting_position bp
+				ON bp.match_id = d.match_id
+				AND bp.innings = d.innings
+				AND bp.batting_team = d.batting_team
+				AND bp.player_name = d.striker`
+		battingPositionWhere = fmt.Sprintf("AND bp.batting_position IN %s", buildInClause(len(battingPositions), len(args)+1))
+		for _, position := range battingPositions {
+			args = append(args, position)
+		}
+	}
+	limitPlaceholder := fmt.Sprintf("$%d", len(args)+1)
+	args = append(args, limit)
+	offsetPlaceholder := fmt.Sprintf("$%d", len(args)+1)
+	args = append(args, offset)
 
-	query := `
+	query := fmt.Sprintf(`
 		WITH filtered_deliveries AS MATERIALIZED (
 			SELECT
 				d.striker,
@@ -207,7 +226,9 @@ func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page,
 				d.wides
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
+			%s
 			WHERE m.league = $1 AND d.innings <= 2
+				%s
 		),
 		aggregated AS (
 			SELECT
@@ -263,10 +284,10 @@ func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page,
 		FROM player_totals pt
 		LEFT JOIN innings_agg ia ON pt.player = ia.striker
 		ORDER BY pt.runs DESC
-		LIMIT $2 OFFSET $3
-	`
+		LIMIT %s OFFSET %s
+	`, battingPositionJoin, battingPositionWhere, limitPlaceholder, offsetPlaceholder)
 
-	rows, err := s.db.QueryContext(ctx, query, league, limit, offset)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -118,8 +118,18 @@ func GetLeadingRunScorers(service *statsservice.Service) http.HandlerFunc {
 			}
 		}
 
-		result, err := service.GetLeadingRunScorers(r.Context(), league, page, limit)
+		battingPositions, err := parseBattingPositions(r)
 		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		result, err := service.GetLeadingRunScorers(r.Context(), league, page, limit, battingPositions)
+		if err != nil {
+			if err == statsservice.ErrInvalidBattingPosition {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -142,6 +152,42 @@ func GetLeadingRunScorers(service *statsservice.Service) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}
+}
+
+func parseBattingPositions(r *http.Request) ([]int, error) {
+	seen := map[int]struct{}{}
+	positions := []int{}
+	appendPosition := func(raw string) error {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return nil
+		}
+		position, err := strconv.Atoi(trimmed)
+		if err != nil || position < 1 || position > 11 {
+			return statsservice.ErrInvalidBattingPosition
+		}
+		if _, exists := seen[position]; exists {
+			return nil
+		}
+		seen[position] = struct{}{}
+		positions = append(positions, position)
+		return nil
+	}
+
+	if single := r.URL.Query().Get("battingPosition"); single != "" {
+		if err := appendPosition(single); err != nil {
+			return nil, err
+		}
+	}
+	if multi := r.URL.Query().Get("battingPositions"); multi != "" {
+		for _, raw := range strings.Split(multi, ",") {
+			if err := appendPosition(raw); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return positions, nil
 }
 
 func GetPlayerCompare(service *statsservice.Service) http.HandlerFunc {

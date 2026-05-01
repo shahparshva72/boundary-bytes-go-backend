@@ -36,7 +36,7 @@ type Service interface {
 	GetFallOfWickets(ctx context.Context, league string, matchID int) (*models.FallOfWicketsResponse, error)
 	GetMatchupStats(ctx context.Context, league, batter, bowler string) (*models.MatchupData, error)
 	GetLeadingWicketTakers(ctx context.Context, league string, page, limit int) ([]models.WicketTaker, int, error)
-	GetLeadingRunScorers(ctx context.Context, league string, page, limit int) ([]models.RunScorer, int, error)
+	GetLeadingRunScorers(ctx context.Context, league string, page, limit int, battingPositions []int) ([]models.RunScorer, int, error)
 	LogAIRequest(ctx context.Context, params models.LogAIRequestParams) (string, error)
 	GetAIRequestByID(ctx context.Context, id string) (*models.AIChatRequestRecord, error)
 	MarkAIRequestAccuracy(ctx context.Context, requestID string, isAccurate bool, feedbackNote *string) error

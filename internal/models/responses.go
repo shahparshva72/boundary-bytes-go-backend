@@ -219,6 +219,7 @@ type StatExplorerFilterOptions struct {
 	BowlingSubTypes     []string `json:"bowlingSubTypes"`
 	PlayingRoles        []string `json:"playingRoles"`
 	PlayingRoleDetails  []string `json:"playingRoleDetails"`
+	BattingPositions    []int    `json:"battingPositions"`
 }
 
 type StatExplorerOptionsMetadata struct {
@@ -265,6 +266,7 @@ type StatExplorerRunFilters struct {
 	OpponentBowlingSubType []string `json:"opponentBowlingSubType,omitempty"`
 	PlayingRole            *string  `json:"playingRole,omitempty"`
 	PlayingRoleDetail      *string  `json:"playingRoleDetail,omitempty"`
+	BattingPositions       []int    `json:"battingPositions,omitempty"`
 }
 
 type StatExplorerRunPagination struct {
