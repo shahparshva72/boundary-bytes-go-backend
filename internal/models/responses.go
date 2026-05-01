@@ -333,6 +333,7 @@ type RSSItemResponse struct {
 	GUID           *string    `json:"guid"`
 	Enclosure      *Enclosure `json:"enclosure,omitempty"`
 	Image          *string    `json:"image,omitempty"`
+	Images         []string   `json:"images,omitempty"`
 }
 
 type Enclosure struct {

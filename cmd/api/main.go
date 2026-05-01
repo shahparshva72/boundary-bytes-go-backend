@@ -1,35 +1,43 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
-	"github.com/shahparshva72/boundary-bytes-go-backend/internal/config"
-	"github.com/shahparshva72/boundary-bytes-go-backend/internal/database"
-	"github.com/shahparshva72/boundary-bytes-go-backend/internal/server"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/app"
 )
 
 func main() {
-	cfg := config.Load()
-
-	db, err := database.New(cfg.DBConnectionURL())
+	application, err := app.New()
 	if err != nil {
-		log.Fatalf("failed to initialize database: %v", err)
+		log.Fatalf("failed to initialize application: %v", err)
 	}
-	defer db.Close()
 
-	sqlGenerator := ai.NewGeminiSQLService(ai.GeminiSQLConfig{
-		APIKey:  cfg.AI.GoogleAPIKey,
-		Model:   cfg.AI.GeminiModel,
-		Timeout: cfg.AI.Timeout,
-	})
+	go func() {
+		fmt.Printf("Server starting on :%s\n", application.Port())
+		if err := application.Run(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("could not start server: %v", err)
+		}
+	}()
 
-	srv := server.NewServer(db, sqlGenerator)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 
-	fmt.Printf("Server starting on :%s\n", cfg.Port)
+	fmt.Println("\nShutting down server...")
 
-	if err := srv.Start(cfg.Port); err != nil {
-		log.Fatalf("could not start server: %v", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := application.Shutdown(ctx); err != nil {
+		log.Fatalf("forced shutdown: %v", err)
 	}
+
+	fmt.Println("Server exited gracefully")
 }
