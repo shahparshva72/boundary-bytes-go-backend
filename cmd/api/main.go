@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,7 +21,7 @@ func main() {
 
 	go func() {
 		fmt.Printf("Server starting on :%s\n", application.Port())
-		if err := application.Run(); err != nil {
+		if err := application.Run(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("could not start server: %v", err)
 		}
 	}()
