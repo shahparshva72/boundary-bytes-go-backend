@@ -510,6 +510,20 @@ type MultiMatchupMetadata struct {
 	ResultCount      int      `json:"resultCount"`
 }
 
+type MatchupRoundResponse struct {
+	Batter          string             `json:"batter"`
+	Prompt          string             `json:"prompt"`
+	QuestionType    string             `json:"questionType"`
+	CorrectOpponent string             `json:"correctOpponent"`
+	Options         []MultiMatchupItem `json:"options"`
+	League          string             `json:"league"`
+	Metadata        MatchupRoundMetadata `json:"metadata"`
+}
+
+type MatchupRoundMetadata struct {
+	AvailableLeagues []string `json:"availableLeagues"`
+}
+
 type PlayerProgressionPoint struct {
 	Over       int      `json:"over"`
 	Phase      string   `json:"phase"`

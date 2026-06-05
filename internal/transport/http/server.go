@@ -68,6 +68,7 @@ func New(deps Dependencies) *Server {
 	r.Get("/api/stats/bowling-wicket-types", handlers.GetBowlingWicketTypes(advancedStatsService))
 	r.Get("/api/stats/matchup", handlers.GetMatchup(statsService))
 	r.Get("/api/stats/multi-matchup", handlers.GetMultiMatchup(advancedStatsService))
+	r.Get("/api/games/matchup-round", handlers.GetMatchupRound(statsService))
 	r.Get("/api/stats/player-compare", handlers.GetPlayerCompare(statsService))
 	r.Get("/api/stats/player-progression", handlers.GetPlayerProgression(advancedStatsService))
 	r.Get("/api/stats/stat-explorer/options", handlers.GetStatExplorerOptions(statsExplorerService))

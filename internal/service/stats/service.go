@@ -14,6 +14,8 @@ type Repository interface {
 	GetLeadingRunScorers(ctx context.Context, league string, page, limit int, battingPositions []int) ([]models.RunScorer, int, error)
 	GetLeadingWicketTakers(ctx context.Context, league string, page, limit int) ([]models.WicketTaker, int, error)
 	GetMatchupStats(ctx context.Context, league, batter, bowler string) (*models.MatchupData, error)
+	GetEligibleMatchupBatters(ctx context.Context, league, seed string) ([]string, error)
+	GetBatterBowlersH2H(ctx context.Context, league, batter string) ([]models.MultiMatchupItem, error)
 	GetPlayerCompare(ctx context.Context, league string, players []string, seasons []string, team *string, statType string) ([]models.PlayerComparePlayer, error)
 	GetRunRateTrend(ctx context.Context, league string, team *string) ([]models.RunRateTrendItem, error)
 	GetTeamRunRateProgression(ctx context.Context, league, team, season string) ([]models.TeamRunRateProgressionPoint, models.TeamRunRateProgressionMetadata, error)
