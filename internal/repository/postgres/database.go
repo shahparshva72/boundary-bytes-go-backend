@@ -44,6 +44,8 @@ type Service interface {
 	MarkAIRequestAccuracy(ctx context.Context, requestID string, isAccurate bool, feedbackNote *string) error
 	GetAIAccuracyStats(ctx context.Context) (models.AIFeedbackStats, error)
 	ExecuteAIQuery(ctx context.Context, query string) (models.AIQueryResult, error)
+	InsertDailyDraftScore(ctx context.Context, params models.SubmitDailyDraftScoreParams) error
+	GetDailyDraftLeaderboard(ctx context.Context, league, date, deviceID string, topN int) (models.DailyDraftLeaderboardResponse, error)
 }
 
 type service struct {

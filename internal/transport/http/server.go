@@ -10,6 +10,7 @@ import (
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/repository/postgres"
 	advancedstatsservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/advancedstats"
 	aifeedbackservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/aifeedback"
+	gamesservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/games"
 	healthservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/health"
 	leaguesservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/leagues"
 	matchesservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/matches"
@@ -26,10 +27,10 @@ type Dependencies struct {
 }
 
 type Server struct {
-	httpServer    *http.Server
-	Router        *chi.Mux
-	DB            postgres.Service
-	SQLGenerator  ai.SQLGenerator
+	httpServer   *http.Server
+	Router       *chi.Mux
+	DB           postgres.Service
+	SQLGenerator ai.SQLGenerator
 }
 
 func New(deps Dependencies) *Server {
@@ -42,6 +43,7 @@ func New(deps Dependencies) *Server {
 	playersService := playersservice.New(deps.DB)
 	statsService := statsservice.New(deps.DB)
 	statsExplorerService := statsexplorerservice.New(deps.DB)
+	gamesService := gamesservice.New(deps.DB)
 	textToSQLService := texttosql.New(deps.DB, deps.SQLGenerator)
 
 	r.Use(middleware.RequestID)
@@ -69,6 +71,8 @@ func New(deps Dependencies) *Server {
 	r.Get("/api/stats/matchup", handlers.GetMatchup(statsService))
 	r.Get("/api/stats/multi-matchup", handlers.GetMultiMatchup(advancedStatsService))
 	r.Get("/api/games/matchup-round", handlers.GetMatchupRound(statsService))
+	r.Post("/api/games/daily-draft/score", handlers.SubmitDailyDraftScore(gamesService))
+	r.Get("/api/games/daily-draft/leaderboard", handlers.GetDailyDraftLeaderboard(gamesService))
 	r.Get("/api/stats/player-compare", handlers.GetPlayerCompare(statsService))
 	r.Get("/api/stats/player-progression", handlers.GetPlayerProgression(advancedStatsService))
 	r.Get("/api/stats/stat-explorer/options", handlers.GetStatExplorerOptions(statsExplorerService))
