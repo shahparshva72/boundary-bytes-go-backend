@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ratelimit"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/repository/postgres"
 	advancedstatsservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/advancedstats"
 	aifeedbackservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/aifeedback"
@@ -23,6 +24,7 @@ import (
 type Dependencies struct {
 	DB           postgres.Service
 	SQLGenerator ai.SQLGenerator
+	RateLimiter  *ratelimit.DailyLimiter
 }
 
 type Server struct {
@@ -80,7 +82,8 @@ func New(deps Dependencies) *Server {
 	r.Get("/api/news", handlers.GetNews)
 	r.Get("/api/ai/feedback", handlers.GetAIFeedbackStats(aiFeedbackService))
 	r.Post("/api/ai/feedback", handlers.SubmitAIFeedback(aiFeedbackService))
-	r.Post("/api/text-to-sql", handlers.TextToSQL(textToSQLService))
+	r.Get("/api/text-to-sql/limits", handlers.TextToSQLLimits(textToSQLService, deps.RateLimiter))
+	r.Post("/api/text-to-sql", handlers.TextToSQL(textToSQLService, deps.RateLimiter))
 
 	return &Server{
 		Router:       r,

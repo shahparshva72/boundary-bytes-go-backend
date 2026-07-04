@@ -3,13 +3,24 @@ package handlers
 import (
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
+
+type rateLimitResponse struct {
+	Limit     int    `json:"limit"`
+	Used      int    `json:"used"`
+	Remaining int    `json:"remaining"`
+	ResetsAt  string `json:"resetsAt"`
+}
 
 type textToSQLSuccessResponse struct {
 	Success   bool                     `json:"success"`
 	Data      []map[string]interface{} `json:"data"`
 	Metadata  textToSQLMetadata        `json:"metadata"`
 	RequestID string                   `json:"requestId,omitempty"`
+	RateLimit *rateLimitResponse       `json:"rateLimit,omitempty"`
 }
 
 type textToSQLMetadata struct {
@@ -19,11 +30,12 @@ type textToSQLMetadata struct {
 }
 
 type apiErrorResponse struct {
-	Success     bool     `json:"success"`
-	Error       string   `json:"error"`
-	Code        string   `json:"code"`
-	Suggestions []string `json:"suggestions,omitempty"`
-	Tips        []string `json:"tips,omitempty"`
+	Success     bool                `json:"success"`
+	Error       string              `json:"error"`
+	Code        string              `json:"code"`
+	Suggestions []string            `json:"suggestions,omitempty"`
+	Tips        []string            `json:"tips,omitempty"`
+	RateLimit   *rateLimitResponse  `json:"rateLimit,omitempty"`
 }
 
 func formatAIError(message, code string, context ...string) apiErrorResponse {
@@ -167,9 +179,9 @@ func generateAISuggestions(code, errorMessage, context string) ([]string, []stri
 		}
 	case "RATE_LIMIT_ERROR":
 		tips = append(tips,
-			"Please wait a moment before asking another question",
-			"You can ask up to 30 questions per minute",
-			"Take your time to think about what cricket statistics you would like to explore",
+			"You can ask up to 20 questions per day",
+			"Your limit resets at midnight UTC",
+			"Make each question count — try the suggestions below for inspiration",
 		)
 	}
 
@@ -198,4 +210,29 @@ func contextValue(values []string) string {
 		return ""
 	}
 	return values[0]
+}
+
+func toRateLimitResponse(status models.RateLimitStatus) rateLimitResponse {
+	return rateLimitResponse{
+		Limit:     status.Limit,
+		Used:      status.Used,
+		Remaining: status.Remaining,
+		ResetsAt:  status.ResetsAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func formatRateLimitError(status models.RateLimitStatus) apiErrorResponse {
+	suggestions, tips := generateAISuggestions("RATE_LIMIT_ERROR", "", "")
+	return apiErrorResponse{
+		Success:     false,
+		Error:       "You've reached your daily limit of 20 questions. Come back tomorrow for more cricket stats!",
+		Code:        "RATE_LIMIT_ERROR",
+		Suggestions: suggestions,
+		Tips:        tips,
+		RateLimit:   ptrRateLimitResponse(toRateLimitResponse(status)),
+	}
+}
+
+func ptrRateLimitResponse(status rateLimitResponse) *rateLimitResponse {
+	return &status
 }

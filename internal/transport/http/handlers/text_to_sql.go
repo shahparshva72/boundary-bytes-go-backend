@@ -5,8 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	aisql "github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ratelimit"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/service/texttosql"
 )
 
@@ -14,14 +17,29 @@ type textToSQLRequest struct {
 	Question string `json:"question"`
 }
 
-func TextToSQL(service *texttosql.Service) http.HandlerFunc {
+func TextToSQL(service *texttosql.Service, limiter *ratelimit.DailyLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var body textToSQLRequest
+		clientIP := extractClientIP(r)
 
+		var body textToSQLRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			service.LogInvalidRequest(r.Context(), "Invalid request format")
 			writeJSON(w, http.StatusBadRequest, formatAIError("Invalid request format", "VALIDATION_ERROR"))
 			return
+		}
+
+		var rateLimitStatus models.RateLimitStatus
+		if limiter != nil {
+			status, err := limiter.Consume(r.Context(), clientIP)
+			if errors.Is(err, ratelimit.ErrDailyLimitExceeded) {
+				writeJSON(w, http.StatusTooManyRequests, formatRateLimitError(status))
+				return
+			}
+			if err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, formatAIError("Rate limiting service is temporarily unavailable. Please try again in a moment.", "AI_ERROR"))
+				return
+			}
+			rateLimitStatus = status
 		}
 
 		result, err := service.Answer(r.Context(), body.Question)
@@ -31,7 +49,11 @@ func TextToSQL(service *texttosql.Service) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, textToSQLSuccessResponse{
+		if limiter != nil {
+			result.RateLimit = rateLimitStatus
+		}
+
+		response := textToSQLSuccessResponse{
 			Success: true,
 			Data:    result.Data,
 			Metadata: textToSQLMetadata{
@@ -40,6 +62,42 @@ func TextToSQL(service *texttosql.Service) http.HandlerFunc {
 				GeneratedSQL:  result.GeneratedSQL,
 			},
 			RequestID: result.RequestID,
+		}
+		if limiter != nil {
+			rateLimit := toRateLimitResponse(result.RateLimit)
+			response.RateLimit = &rateLimit
+		}
+
+		writeJSON(w, http.StatusOK, response)
+	}
+}
+
+func TextToSQLLimits(_ *texttosql.Service, limiter *ratelimit.DailyLimiter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if limiter == nil {
+			now := time.Now().UTC()
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"success": true,
+				"rateLimit": toRateLimitResponse(models.RateLimitStatus{
+					Limit:     ratelimit.DefaultDailyLimit,
+					Used:      0,
+					Remaining: ratelimit.DefaultDailyLimit,
+					ResetsAt:  ratelimit.EndOfDayUTC(now),
+				}),
+			})
+			return
+		}
+
+		clientIP := extractClientIP(r)
+		status, err := limiter.Status(r.Context(), clientIP)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, formatAIError("Rate limiting service is temporarily unavailable. Please try again in a moment.", "AI_ERROR"))
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":   true,
+			"rateLimit": toRateLimitResponse(status),
 		})
 	}
 }

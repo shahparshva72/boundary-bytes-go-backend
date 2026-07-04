@@ -11,9 +11,10 @@ import (
 )
 
 type Config struct {
-	Port string
-	DB   DBConfig
-	AI   AIConfig
+	Port      string
+	DB        DBConfig
+	AI        AIConfig
+	RateLimit RateLimitConfig
 }
 
 type DBConfig struct {
@@ -29,6 +30,17 @@ type AIConfig struct {
 	GoogleAPIKey string
 	GeminiModel  string
 	Timeout      time.Duration
+}
+
+type RateLimitConfig struct {
+	UpstashURL   string
+	UpstashToken string
+	IPHashSecret string
+	DailyLimit   int
+}
+
+func (c RateLimitConfig) Enabled() bool {
+	return c.UpstashURL != "" && c.UpstashToken != "" && c.IPHashSecret != ""
 }
 
 func Load() *Config {
@@ -50,6 +62,12 @@ func Load() *Config {
 			GoogleAPIKey: getEnv("GOOGLE_API_KEY", ""),
 			GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash"),
 			Timeout:      time.Duration(getEnvInt("AI_TIMEOUT_SECONDS", 20)) * time.Second,
+		},
+		RateLimit: RateLimitConfig{
+			UpstashURL:   getEnv("UPSTASH_REDIS_REST_URL", ""),
+			UpstashToken: getEnv("UPSTASH_REDIS_REST_TOKEN", ""),
+			IPHashSecret: getEnv("RATE_LIMIT_IP_HASH_SECRET", ""),
+			DailyLimit:   getEnvInt("TEXT_TO_SQL_DAILY_LIMIT", 20),
 		},
 	}
 }

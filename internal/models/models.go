@@ -131,6 +131,13 @@ type LogAIRequestParams struct {
 	ErrorMessage      *string
 }
 
+type RateLimitStatus struct {
+	Limit     int       `json:"limit"`
+	Used      int       `json:"used"`
+	Remaining int       `json:"remaining"`
+	ResetsAt  time.Time `json:"resetsAt"`
+}
+
 type AIFeedbackStats struct {
 	Total        int     `json:"total"`
 	Accurate     int     `json:"accurate"`

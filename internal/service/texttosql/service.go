@@ -45,6 +45,7 @@ type Result struct {
 	GeneratedSQL      string
 	RequestID         string
 	SanitizedQuestion string
+	RateLimit         models.RateLimitStatus
 }
 
 type Error struct {

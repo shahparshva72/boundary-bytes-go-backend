@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/config"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ratelimit"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/repository/postgres"
 	httpserver "github.com/shahparshva72/boundary-bytes-go-backend/internal/transport/http"
 )
@@ -30,9 +32,25 @@ func New() (*App, error) {
 		Timeout: cfg.AI.Timeout,
 	})
 
+	var dailyLimiter *ratelimit.DailyLimiter
+	if cfg.RateLimit.Enabled() {
+		redisClient, err := ratelimit.NewUpstashClient(cfg.RateLimit.UpstashURL, cfg.RateLimit.UpstashToken)
+		if err != nil {
+			return nil, fmt.Errorf("initialize upstash redis: %w", err)
+		}
+
+		dailyLimiter, err = ratelimit.NewDailyLimiter(redisClient, cfg.RateLimit.IPHashSecret, cfg.RateLimit.DailyLimit)
+		if err != nil {
+			return nil, fmt.Errorf("initialize daily rate limiter: %w", err)
+		}
+	} else {
+		log.Println("Warning: text-to-sql rate limiting disabled (missing UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, or RATE_LIMIT_IP_HASH_SECRET)")
+	}
+
 	server := httpserver.New(httpserver.Dependencies{
 		DB:           db,
 		SQLGenerator: sqlGenerator,
+		RateLimiter:  dailyLimiter,
 	})
 
 	return &App{
