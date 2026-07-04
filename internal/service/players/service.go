@@ -3,6 +3,7 @@ package players
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
@@ -157,11 +158,7 @@ func (s *Service) availableLeagues(ctx context.Context) []string {
 }
 
 func sortLeagueStats(stats []models.PlayerProfileLeagueStats, order map[string]int) {
-	for i := range stats {
-		for j := i + 1; j < len(stats); j++ {
-			if order[stats[j].League] < order[stats[i].League] {
-				stats[i], stats[j] = stats[j], stats[i]
-			}
-		}
-	}
+	sort.SliceStable(stats, func(i, j int) bool {
+		return order[stats[i].League] < order[stats[j].League]
+	})
 }
