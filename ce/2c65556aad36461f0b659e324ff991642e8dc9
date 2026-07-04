@@ -1,0 +1,67 @@
+internal/config/config.go
+  s_8c0049a401ec06::t_3a31dbd3ef3110 35-45
+  s_8c0049a401ec06::t_24fceaa197eef5 66-71
+  s_8c0049a401ec06::t_e07a5ba3ece9b1 14-17
+internal/ratelimit/errors.go
+  s_8c0049a401ec06::t_0a4767277d27e4 1-5
+internal/ratelimit/ip_hash.go
+  s_8c0049a401ec06::t_c75a4da52d4a85 1-20
+internal/ratelimit/upstash.go
+  s_8c0049a401ec06::t_ee15b8a4481d13 1-132
+internal/service/texttosql/service.go
+  s_8c0049a401ec06::t_b3c0fd10bf52a2 48
+internal/transport/http/handlers/client_ip.go
+  s_8c0049a401ec06::t_4338beb2b134c3 1-24
+internal/transport/http/handlers/ai_responses.go
+  s_8c0049a401ec06::t_fe289647ef5b24 182-184
+  s_8c0049a401ec06::t_6207260d5c3d51 214-238
+  s_8c0049a401ec06::t_6ea49c8acd393b 6-8
+  s_8c0049a401ec06::t_0d6547c1359642 33-38
+  s_8c0049a401ec06::t_ca6fc545c5b695 11-17,23
+.env.example
+  s_8c0049a401ec06::t_0a75712db1d797 16-21
+internal/models/models.go
+  s_8c0049a401ec06::t_073db5e7e72212 134-138
+  s_8c0049a401ec06::t_e0261b7fb3c57f 139-140
+internal/ratelimit/limiter.go
+  s_8c0049a401ec06::t_c20b4750cdf1dd 1-107,109,114-122
+  s_8c0049a401ec06::t_e0150c512faac6 108,110-113
+internal/transport/http/server.go
+  s_8c0049a401ec06::t_541cb219dc9f50 10
+  s_8c0049a401ec06::t_7e9c8696a89d67 85-86
+  s_8c0049a401ec06::t_3585c7b137fe5f 27
+internal/transport/http/handlers/text_to_sql.go
+  s_8c0049a401ec06::t_837870f137c309 8,75,78,85
+  s_8c0049a401ec06::t_b67fb587108ad3 11
+  s_8c0049a401ec06::t_bfa4303414ba1a 12,20,31-44,52-56,65-71,77,79-84,86-90,92,94
+  s_8c0049a401ec06::t_50e3aa3be69c91 22,72-74,76,91,93,95-100
+  s_8c0049a401ec06::t_eaf795c55c2433 24
+internal/app/app.go
+  s_8c0049a401ec06::t_fdaf66b490e385 6,10
+  s_8c0049a401ec06::t_72776972fc8c1d 35-49,53
+internal/ratelimit/limiter_test.go
+  s_8c0049a401ec06::t_7cc016cc2ee738 1-29
+internal/ratelimit/ip_hash_test.go
+  s_8c0049a401ec06::t_ef2590069c603a 1-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "ce2c65556aad36461f0b659e324ff991642e8dc9",
+  "prompts": {},
+  "humans": {
+    "h_a9e13ec10ed6a5": {
+      "author": "Parshva <shahparshva72@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_8c0049a401ec06": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "a0e713f9-42fe-4077-8591-e403bdc18600",
+        "model": "default"
+      },
+      "human_author": "Parshva <shahparshva72@gmail.com>"
+    }
+  }
+}
