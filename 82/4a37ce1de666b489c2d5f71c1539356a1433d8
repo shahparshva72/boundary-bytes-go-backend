@@ -1,0 +1,20 @@
+internal/service/players/service.go
+  s_a1bf3576ba3ee3::t_aa4a1c13d8cfb2 161-163
+  s_a1bf3576ba3ee3::t_b9951399728fab 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "824a37ce1de666b489c2d5f71c1539356a1433d8",
+  "prompts": {},
+  "sessions": {
+    "s_a1bf3576ba3ee3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0d398b67cffeiXTUiGG7H4X25y",
+        "model": "gemini-3.5-flash"
+      },
+      "human_author": "Parshva <shahparshva72@gmail.com>"
+    }
+  }
+}
