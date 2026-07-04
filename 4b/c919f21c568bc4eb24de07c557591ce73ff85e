@@ -1,0 +1,50 @@
+internal/repository/postgres/players.go
+  s_333236e02a9bf5::t_e59310395d6629 14,20,85-92,95-101,108-132,135-189
+  s_333236e02a9bf5::t_f5465d14a53c3e 5-6
+  s_333236e02a9bf5::t_51f0671c4ecfff 93-94
+  s_333236e02a9bf5::t_cec8ad21d85df2 133-134
+  s_333236e02a9bf5::t_3f786d9f10cdfb 102-107
+  s_333236e02a9bf5::t_86dc7c6d4f0602 13
+  s_333236e02a9bf5::t_62f475a62f4e59 15-19
+  s_333236e02a9bf5::t_728c9fa5160843 21-22
+internal/transport/http/server.go
+  s_333236e02a9bf5::t_e225f1e242f903 61-62
+  s_333236e02a9bf5::t_cb9ed71bd853dd 45
+internal/transport/http/handlers/players.go
+  s_333236e02a9bf5::t_7469c06ef053b3 5,7,67-69,71-132
+  s_333236e02a9bf5::t_75c181e33096df 9
+  s_333236e02a9bf5::t_2a726de71a5216 70
+internal/service/players/service_test.go
+  s_333236e02a9bf5::t_9017c22aa6ab4e 7-9,13-24,39-59,64,80,87-224
+internal/models/responses.go
+  s_333236e02a9bf5::t_ab366b1e53eeb0 14-46
+internal/repository/postgres/database.go
+  s_333236e02a9bf5::t_e61f25af588c69 20-22
+migrations/000008_add_player_slug.down.sql
+  s_333236e02a9bf5::t_eb43df7f794a0f 6
+  s_333236e02a9bf5::t_795fffe9d5bc88 1-5
+migrations/000008_add_player_slug.up.sql
+  s_333236e02a9bf5::t_52ce9844439fc3 1-14
+  s_333236e02a9bf5::t_f9639c333ae054 15-51
+internal/service/players/service.go
+  s_333236e02a9bf5::t_5a7fe78462b4d9 6
+  s_333236e02a9bf5::t_78d8861d1bd052 89-90,94,117
+  s_333236e02a9bf5::t_1a7436a596409a 126,132
+  s_333236e02a9bf5::t_2c76ae4e065b40 5,7-10,17-23,28,36-47,74-88,91-93,95-116,118-125,127-131,133-150,158-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4bc919f21c568bc4eb24de07c557591ce73ff85e",
+  "prompts": {},
+  "sessions": {
+    "s_333236e02a9bf5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0d40c37beffeVNalPWgAuktaAw",
+        "model": "kimi-k2.7-code"
+      },
+      "human_author": "Parshva <shahparshva72@gmail.com>"
+    }
+  }
+}
