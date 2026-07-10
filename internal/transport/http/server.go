@@ -41,8 +41,8 @@ func New(deps Dependencies) *Server {
 	healthService := healthservice.New(deps.DB)
 	leaguesService := leaguesservice.New(deps.DB)
 	matchesService := matchesservice.New(deps.DB)
-	playersService := playersservice.New(deps.DB)
 	statsService := statsservice.New(deps.DB)
+	playersService := playersservice.New(deps.DB, statsService)
 	statsExplorerService := statsexplorerservice.New(deps.DB)
 	textToSQLService := texttosql.New(deps.DB, deps.SQLGenerator)
 
@@ -58,6 +58,8 @@ func New(deps Dependencies) *Server {
 	r.Get("/db-health", handlers.DBHealthCheck(healthService))
 	r.Get("/api/players/batters", handlers.GetBatters(playersService))
 	r.Get("/api/players/bowlers", handlers.GetBowlers(playersService))
+	r.Get("/api/players", handlers.ListPlayerSlugs(playersService))
+	r.Get("/api/players/{slug}", handlers.GetPlayerProfile(playersService))
 	r.Get("/api/leagues/config", handlers.GetLeagueConfigs(leaguesService))
 	r.Get("/api/stats/seasons", handlers.GetSeasons(matchesService))
 	r.Get("/api/stats/latest-match-date", handlers.GetLatestMatchDate(matchesService))

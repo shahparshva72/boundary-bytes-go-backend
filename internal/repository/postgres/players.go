@@ -2,10 +2,23 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
+
+// parsePgTextArray converts a Postgres array rendered as a comma-separated
+// string (via array_to_string) back into a Go slice. An empty string means
+// an empty (or NULL) array.
+func parsePgTextArray(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
+}
 
 func (s *service) GetBattersByLeague(ctx context.Context, league string) ([]string, error) {
 	query := `
@@ -67,6 +80,111 @@ func (s *service) GetBowlersByLeague(ctx context.Context, league string) ([]stri
 	}
 
 	return bowlers, nil
+}
+
+func (s *service) GetPlayerBySlug(ctx context.Context, slug string) (string, []string, error) {
+	query := `
+		SELECT player_name, array_to_string(leagues, ',')
+		FROM player_slug
+		WHERE slug = $1;
+	`
+
+	var playerName string
+	var leagues string
+	err := s.db.QueryRowContext(ctx, query, slug).Scan(&playerName, &leagues)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil, nil
+		}
+		return "", nil, err
+	}
+
+	return playerName, parsePgTextArray(leagues), nil
+}
+
+func (s *service) ListPlayerSlugs(ctx context.Context, limit, offset int) ([]models.PlayerSlugEntry, int, error) {
+	countQuery := `SELECT COUNT(*) FROM player_slug;`
+	var total int
+	if err := s.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT slug, player_name, array_to_string(leagues, ',')
+		FROM player_slug
+		ORDER BY player_name
+		LIMIT $1 OFFSET $2;
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var entries []models.PlayerSlugEntry
+	for rows.Next() {
+		var entry models.PlayerSlugEntry
+		var entryLeagues string
+		if err := rows.Scan(&entry.Slug, &entry.PlayerName, &entryLeagues); err != nil {
+			return nil, 0, err
+		}
+		entry.Leagues = parsePgTextArray(entryLeagues)
+		entries = append(entries, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	return entries, total, nil
+}
+
+func (s *service) GetPlayerStyleByName(ctx context.Context, playerName string) (*models.PlayerProfileBio, error) {
+	query := `
+		SELECT full_name, batting_hand, bowling_hand, bowling_type, playing_role, playing_role_detail
+		FROM player_style
+		WHERE name = $1 OR full_name = $1
+		LIMIT 1;
+	`
+
+	var bio models.PlayerProfileBio
+	var fullName, battingHand, bowlingHand, bowlingType, playingRole, playingRoleDetail sql.NullString
+	err := s.db.QueryRowContext(ctx, query, playerName).Scan(
+		&fullName,
+		&battingHand,
+		&bowlingHand,
+		&bowlingType,
+		&playingRole,
+		&playingRoleDetail,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if fullName.Valid {
+		bio.FullName = &fullName.String
+	}
+	if battingHand.Valid {
+		bio.BattingHand = &battingHand.String
+	}
+	if bowlingHand.Valid {
+		bio.BowlingHand = &bowlingHand.String
+	}
+	if bowlingType.Valid {
+		bio.BowlingType = &bowlingType.String
+	}
+	if playingRole.Valid {
+		bio.PlayingRole = &playingRole.String
+	}
+	if playingRoleDetail.Valid {
+		bio.PlayingRoleDetail = &playingRoleDetail.String
+	}
+
+	return &bio, nil
 }
 
 func (s *service) GetAllLeagues(ctx context.Context) ([]string, error) {

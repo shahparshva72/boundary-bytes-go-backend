@@ -11,6 +11,39 @@ type PlayerListMetadata struct {
 	TotalRecords     int      `json:"totalRecords"`
 }
 
+type PlayerSlugEntry struct {
+	Slug       string   `json:"slug"`
+	PlayerName string   `json:"playerName"`
+	Leagues    []string `json:"leagues"`
+}
+
+type PlayerProfileResponse struct {
+	Slug        string                     `json:"slug"`
+	Name        string                     `json:"name"`
+	Bio         *PlayerProfileBio          `json:"bio,omitempty"`
+	LeagueStats []PlayerProfileLeagueStats `json:"leagueStats"`
+	Metadata    PlayerProfileMetadata      `json:"metadata"`
+}
+
+type PlayerProfileBio struct {
+	FullName          *string `json:"fullName,omitempty"`
+	BattingHand       *string `json:"battingHand,omitempty"`
+	BowlingHand       *string `json:"bowlingHand,omitempty"`
+	BowlingType       *string `json:"bowlingType,omitempty"`
+	PlayingRole       *string `json:"playingRole,omitempty"`
+	PlayingRoleDetail *string `json:"playingRoleDetail,omitempty"`
+}
+
+type PlayerProfileLeagueStats struct {
+	League  string                `json:"league"`
+	Batting *PlayerCompareBatting `json:"batting,omitempty"`
+	Bowling *PlayerCompareBowling `json:"bowling,omitempty"`
+}
+
+type PlayerProfileMetadata struct {
+	AvailableLeagues []string `json:"availableLeagues"`
+}
+
 type MatchupResponse struct {
 	Data     MatchupData     `json:"data"`
 	League   string          `json:"league"`
