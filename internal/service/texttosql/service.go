@@ -2,13 +2,16 @@ package texttosql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	aisql "github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
@@ -28,6 +31,11 @@ type SQLGenerator interface {
 	GenerateSQL(ctx context.Context, question string) ([]string, error)
 }
 
+// SQLRepairer is optionally implemented by generators that can correct SQL the database rejected.
+type SQLRepairer interface {
+	RepairSQL(ctx context.Context, question string, failedQueries []string, dbError string) ([]string, error)
+}
+
 type QueryClassifier interface {
 	ClassifyCricketQuery(ctx context.Context, question string) (*aisql.CricketClassification, error)
 }
@@ -43,6 +51,21 @@ type Service struct {
 	classifier     QueryClassifier
 	lookupTimeout  time.Duration
 	executeTimeout time.Duration
+
+	resultCacheMu sync.Mutex
+	resultCache   map[string]cachedQueryResult
+}
+
+// Stats only change when new matches are ingested, so identical SQL can be served
+// from memory for a while. Leaderboard aggregates scan ~300k deliveries (~100ms).
+const (
+	resultCacheTTL        = 10 * time.Minute
+	resultCacheMaxEntries = 512
+)
+
+type cachedQueryResult struct {
+	result    models.AIQueryResult
+	expiresAt time.Time
 }
 
 type Result struct {
@@ -72,6 +95,7 @@ func New(repository Repository, generator SQLGenerator) *Service {
 		generator:      generator,
 		lookupTimeout:  15 * time.Second,
 		executeTimeout: 20 * time.Second,
+		resultCache:    make(map[string]cachedQueryResult),
 	}
 }
 
@@ -110,8 +134,9 @@ func (s *Service) Answer(ctx context.Context, question string) (*Result, error) 
 			log.Printf("[Jev] Classified query: intent=%s league=%s phase=%s is_cricket=%t confidence=%.2f",
 				classification.Intent, classification.League, classification.Phase, classification.IsCricket, classification.Confidence)
 
-			// Domain Guardrail: reject non-cricket questions in ~80ms without hitting Gemini
-			if !classification.IsCricket && classification.Confidence >= 0.80 {
+			// Domain Guardrail: reject clearly non-cricket questions without hitting Gemini.
+			// Gate on the is_cricket score itself; Confidence belongs to the intent answer.
+			if !classification.IsCricket && classification.CricketScore <= 0.30 {
 				errMessage := "Please ask a question related to cricket statistics."
 				s.log(ctx, models.LogAIRequestParams{
 					Question:     fallbackQuestion(question),
@@ -146,7 +171,7 @@ func (s *Service) Answer(ctx context.Context, question string) (*Result, error) 
 		queryCtx, cancel := context.WithTimeout(ctx, s.lookupTimeout)
 		defer cancel()
 
-		result, err := s.repository.ExecuteAIQuery(queryCtx, sqlText)
+		result, err := s.executeCached(queryCtx, sqlText)
 		if err != nil {
 			return nil, err
 		}
@@ -174,9 +199,9 @@ func (s *Service) Answer(ctx context.Context, question string) (*Result, error) 
 		queryCtx, cancel := context.WithTimeout(ctx, s.executeTimeout)
 		defer cancel()
 
-		queryResult, err := s.repository.ExecuteAIQuery(queryCtx, finalSQL)
+		queryResult, err := s.executeCached(queryCtx, finalSQL)
 		if err != nil {
-			return "", nil, 0, err
+			return finalSQL, nil, 0, err
 		}
 
 		formattedData := queryResult.Data
@@ -212,6 +237,17 @@ func (s *Service) Answer(ctx context.Context, question string) (*Result, error) 
 
 		var execErr error
 		finalSQL, formattedData, queryExecTimeMS, execErr = executePipeline(rawGeneratedQueries)
+
+		// One self-correction round when PostgreSQL rejects the generated SQL itself.
+		if repairer, ok := s.generator.(SQLRepairer); ok && isRepairableSQLError(execErr) {
+			log.Printf("[Gemini] Generated SQL failed (%v); asking for a corrected query", execErr)
+			if repaired, repairErr := repairer.RepairSQL(ctx, sanitizedQuestion, rawGeneratedQueries, execErr.Error()); repairErr == nil {
+				finalSQL, formattedData, queryExecTimeMS, execErr = executePipeline(repaired)
+			} else {
+				log.Printf("[Gemini] SQL repair request failed: %v", repairErr)
+			}
+		}
+
 		if execErr != nil {
 			errCode := CodeDatabase
 			if strings.Contains(execErr.Error(), "security validation") || strings.Contains(execErr.Error(), "must be SELECT") {
@@ -239,6 +275,40 @@ func (s *Service) Answer(ctx context.Context, question string) (*Result, error) 
 		SanitizedQuestion: sanitizedQuestion,
 		RoutedBy:          routedBy,
 	}, nil
+}
+
+// executeCached runs a validated read-only query, reusing a recent result for identical SQL.
+// Cached rows are shared between requests and must be treated as read-only.
+func (s *Service) executeCached(ctx context.Context, sqlText string) (models.AIQueryResult, error) {
+	s.resultCacheMu.Lock()
+	entry, ok := s.resultCache[sqlText]
+	s.resultCacheMu.Unlock()
+	if ok && time.Now().Before(entry.expiresAt) {
+		cached := entry.result
+		cached.ExecutionTimeMS = 0
+		return cached, nil
+	}
+
+	result, err := s.repository.ExecuteAIQuery(ctx, sqlText)
+	if err != nil {
+		return result, err
+	}
+
+	s.resultCacheMu.Lock()
+	if len(s.resultCache) >= resultCacheMaxEntries {
+		clear(s.resultCache)
+	}
+	s.resultCache[sqlText] = cachedQueryResult{result: result, expiresAt: time.Now().Add(resultCacheTTL)}
+	s.resultCacheMu.Unlock()
+	return result, nil
+}
+
+// isRepairableSQLError reports whether PostgreSQL rejected the query text itself
+// (SQLSTATE class 42: syntax errors, unknown columns, GROUP BY violations, ...),
+// as opposed to timeouts or connection problems that a rewrite cannot fix.
+func isRepairableSQLError(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "42")
 }
 
 func (s *Service) LogInvalidRequest(ctx context.Context, message string) {
@@ -436,6 +506,9 @@ var (
 		"player": true, "players": true, "batsman": true, "batsmen": true, "batter": true, "batters": true,
 		"bowler": true, "bowlers": true, "ball": true, "balls": true, "leaderboard": true, "list": true,
 		"overall": true, "cap": true, "orange": true, "purple": true,
+		"batting": true, "bowling": true, "performance": true, "profile": true, "figures": true,
+		"numbers": true, "show": true, "me": true, "give": true, "tell": true, "about": true,
+		"does": true, "did": true, "get": true,
 	}
 )
 
@@ -466,15 +539,12 @@ func extractPlayerName(question string) (string, string) {
 func extractHeadToHeadPlayers(question string) (string, string) {
 	lower := strings.ToLower(question)
 	var p1, p2 string
-	if strings.Contains(lower, " vs ") {
-		parts := strings.SplitN(question, " vs ", 2)
-		p1, p2 = parts[0], parts[1]
-	} else if strings.Contains(lower, " against ") {
-		parts := strings.SplitN(question, " against ", 2)
-		p1, p2 = parts[0], parts[1]
-	} else if strings.Contains(lower, " v ") {
-		parts := strings.SplitN(question, " v ", 2)
-		p1, p2 = parts[0], parts[1]
+	for _, sep := range []string{" vs ", " against ", " v "} {
+		// Split on the lowercased index so "Kohli VS Bumrah" doesn't index past a one-element slice.
+		if idx := strings.Index(lower, sep); idx >= 0 {
+			p1, p2 = question[:idx], question[idx+len(sep):]
+			break
+		}
 	}
 
 	if p1 != "" && p2 != "" {
@@ -505,10 +575,10 @@ func buildFastPathQueries(intent, league, phase, question string) []string {
 	switch {
 	case strings.Contains(lowerQ, "wpl") || normalizedLeague == "WPL":
 		leagueFilter = "m.league = 'WPL'"
-	case strings.Contains(lowerQ, "bbl") || normalizedLeague == "BBL":
-		leagueFilter = "m.league = 'BBL'"
 	case strings.Contains(lowerQ, "wbbl") || normalizedLeague == "WBBL":
 		leagueFilter = "m.league = 'WBBL'"
+	case strings.Contains(lowerQ, "bbl") || normalizedLeague == "BBL":
+		leagueFilter = "m.league = 'BBL'"
 	case strings.Contains(lowerQ, "sa20") || normalizedLeague == "SA20":
 		leagueFilter = "m.league = 'SA20'"
 	case strings.Contains(lowerQ, "ipl") || normalizedLeague == "IPL":

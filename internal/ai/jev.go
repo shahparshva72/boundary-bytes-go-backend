@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +23,13 @@ const (
 	defaultJevBaseURL = "https://api.typesafe.ai/v1/systemone"
 	defaultJevModel   = "jev-latest"
 	defaultJevTimeout = 2 * time.Second
+
+	// Jev is served from us-west-2, so every fresh TCP+TLS handshake costs ~2 extra
+	// round trips (~800ms from India). Keep the connection pooled and warm.
+	jevIdleConnTimeout  = 5 * time.Minute
+	jevKeepWarmInterval = 60 * time.Second
+	jevCacheTTL         = 6 * time.Hour
+	jevCacheMaxEntries  = 2048
 )
 
 type JevConfig struct {
@@ -62,7 +71,9 @@ type CricketClassification struct {
 	League     string
 	Phase      string
 	Confidence float64
-	RawAnswers map[string]JevAnswer
+	// CricketScore is the raw is_cricket noul value (0 = definitely not cricket).
+	CricketScore float64
+	RawAnswers   map[string]JevAnswer
 }
 
 type JevClient struct {
@@ -70,6 +81,16 @@ type JevClient struct {
 	baseURL    string
 	model      string
 	httpClient *http.Client
+
+	lastUsed atomic.Int64 // unix nanos of the last outbound request
+
+	cacheMu sync.Mutex
+	cache   map[string]cachedClassification
+}
+
+type cachedClassification struct {
+	value     CricketClassification
+	expiresAt time.Time
 }
 
 func NewJevClient(config JevConfig) *JevClient {
@@ -93,8 +114,70 @@ func NewJevClient(config JevConfig) *JevClient {
 		baseURL: baseURL,
 		model:   model,
 		httpClient: &http.Client{
-			Timeout: timeout,
+			Timeout:   timeout,
+			Transport: newJevTransport(),
 		},
+		cache: make(map[string]cachedClassification),
+	}
+}
+
+func newJevTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ForceAttemptHTTP2 = true
+	transport.MaxIdleConnsPerHost = 16
+	transport.IdleConnTimeout = jevIdleConnTimeout
+	return transport
+}
+
+// Warm opens (or refreshes) a pooled connection to Jev without running a model:
+// an empty body is rejected with 422 by request validation, but the TLS session
+// stays in the pool so the next real classification pays a single round trip.
+func (c *JevClient) Warm(ctx context.Context) error {
+	if !c.Configured() {
+		return ErrJevNotConfigured
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, strings.NewReader("{}"))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	c.lastUsed.Store(time.Now().UnixNano())
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.Body.Close()
+}
+
+// KeepWarm warms the connection immediately and then re-warms it whenever it has
+// been idle for longer than the keep-warm interval, until ctx is cancelled.
+func (c *JevClient) KeepWarm(ctx context.Context) {
+	if !c.Configured() {
+		return
+	}
+
+	warm := func() {
+		warmCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		_ = c.Warm(warmCtx)
+	}
+
+	warm()
+	ticker := time.NewTicker(jevKeepWarmInterval / 2)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if time.Since(time.Unix(0, c.lastUsed.Load())) >= jevKeepWarmInterval {
+				warm()
+			}
+		}
 	}
 }
 
@@ -127,6 +210,7 @@ func (c *JevClient) Evaluate(ctx context.Context, state map[string]interface{}, 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
+	c.lastUsed.Store(time.Now().UnixNano())
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrJevUnavailable, err.Error())
@@ -152,6 +236,11 @@ func (c *JevClient) Evaluate(ctx context.Context, state map[string]interface{}, 
 
 // ClassifyCricketQuery executes typed questions specifically for cricket statistics query routing and guardrails.
 func (c *JevClient) ClassifyCricketQuery(ctx context.Context, question string) (*CricketClassification, error) {
+	cacheKey := strings.ToLower(strings.TrimSpace(question))
+	if cached, ok := c.cachedClassification(cacheKey); ok {
+		return cached, nil
+	}
+
 	questions := map[string]JevQuestion{
 		"is_cricket": {
 			Type:         "noul",
@@ -205,8 +294,10 @@ func (c *JevClient) ClassifyCricketQuery(ctx context.Context, question string) (
 	}
 
 	isCricket := false
+	cricketScore := 0.0
 	if isCricketAns, ok := resp.Answers["is_cricket"]; ok && isCricketAns.Noul != nil {
-		isCricket = *isCricketAns.Noul >= 0.70
+		cricketScore = *isCricketAns.Noul
+		isCricket = cricketScore >= 0.70
 	}
 
 	intent := "complex_query"
@@ -226,12 +317,42 @@ func (c *JevClient) ClassifyCricketQuery(ctx context.Context, question string) (
 		phase = *phaseAns.Choice
 	}
 
-	return &CricketClassification{
-		IsCricket:  isCricket,
-		Intent:     intent,
-		League:     league,
-		Phase:      phase,
-		Confidence: confidence,
-		RawAnswers: resp.Answers,
-	}, nil
+	classification := &CricketClassification{
+		IsCricket:    isCricket,
+		Intent:       intent,
+		League:       league,
+		Phase:        phase,
+		Confidence:   confidence,
+		CricketScore: cricketScore,
+		RawAnswers:   resp.Answers,
+	}
+	c.storeClassification(cacheKey, classification)
+	return classification, nil
+}
+
+func (c *JevClient) cachedClassification(key string) (*CricketClassification, bool) {
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+
+	entry, ok := c.cache[key]
+	if !ok {
+		return nil, false
+	}
+	if time.Now().After(entry.expiresAt) {
+		delete(c.cache, key)
+		return nil, false
+	}
+	value := entry.value
+	return &value, true
+}
+
+func (c *JevClient) storeClassification(key string, classification *CricketClassification) {
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+
+	if len(c.cache) >= jevCacheMaxEntries {
+		// Classifications are cheap to recompute; a full reset keeps this bounded without LRU bookkeeping.
+		clear(c.cache)
+	}
+	c.cache[key] = cachedClassification{value: *classification, expiresAt: time.Now().Add(jevCacheTTL)}
 }

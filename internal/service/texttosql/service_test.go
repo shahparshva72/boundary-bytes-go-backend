@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	aisql "github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
@@ -322,3 +323,139 @@ func (m *mockRepositoryFunc) LogAIRequest(ctx context.Context, params models.Log
 	return "log-1", nil
 }
 
+func TestExtractHeadToHeadPlayersUppercaseSeparator(t *testing.T) {
+	batter, bowler := extractHeadToHeadPlayers("Kohli VS Bumrah")
+	if batter != "Kohli" || bowler != "Bumrah" {
+		t.Fatalf("expected Kohli/Bumrah, got %q/%q", batter, bowler)
+	}
+}
+
+func TestBuildFastPathQueriesPrefersWBBLOverBBL(t *testing.T) {
+	queries := buildFastPathQueries("leading_run_scorers", "unknown", "all", "top run scorers in WBBL")
+	if len(queries) != 1 || !strings.Contains(queries[0], "m.league = 'WBBL'") {
+		t.Fatalf("expected WBBL league filter, got %v", queries)
+	}
+}
+
+func TestAnswerDoesNotRejectAmbiguousCricketScore(t *testing.T) {
+	repo := &mockRepository{result: models.AIQueryResult{Data: []map[string]interface{}{{"x": int64(1)}}}}
+	gen := &mockGenerator{queries: []string{"SELECT 1"}}
+	classifier := &mockClassifier{
+		classification: &aisql.CricketClassification{
+			IsCricket:    false,
+			CricketScore: 0.55,
+			Intent:       "complex_query",
+			Confidence:   0.95,
+		},
+	}
+
+	svc := New(repo, gen).WithClassifier(classifier)
+	if _, err := svc.Answer(context.Background(), "Who has the best record at Chepauk?"); err != nil {
+		t.Fatalf("expected ambiguous query to fall through to Gemini, got %v", err)
+	}
+	if !gen.called {
+		t.Fatal("expected Gemini generator to be called for ambiguous query")
+	}
+}
+
+func TestAnswerReusesCachedQueryResult(t *testing.T) {
+	executions := 0
+	repo := &mockRepositoryFunc{execFunc: func(_ context.Context, _ string) (models.AIQueryResult, error) {
+		executions++
+		return models.AIQueryResult{Data: []map[string]interface{}{{"striker": "V Kohli", "runs": int64(8004)}}, RowCount: 1}, nil
+	}}
+	gen := &mockGenerator{queries: []string{"SELECT 1"}}
+	classifier := &mockClassifier{classification: &aisql.CricketClassification{
+		IsCricket: true, CricketScore: 0.99, Intent: "leading_run_scorers", League: "IPL", Confidence: 0.99,
+	}}
+
+	svc := New(repo, gen).WithClassifier(classifier)
+	for i := 0; i < 2; i++ {
+		res, err := svc.Answer(context.Background(), "Top run scorers in IPL")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.RowCount != 1 {
+			t.Fatalf("expected 1 row, got %d", res.RowCount)
+		}
+	}
+	if executions != 1 {
+		t.Fatalf("expected 1 database execution, got %d", executions)
+	}
+}
+
+func TestExtractPlayerNameIgnoresStatTypeWords(t *testing.T) {
+	for _, q := range []string{"Kohli batting stats in IPL", "Bumrah bowling figures in IPL", "show me Kohli batting performance"} {
+		_, surname := extractPlayerName(q)
+		if surname != "Kohli" && surname != "Bumrah" {
+			t.Fatalf("%q: expected player surname, got %q", q, surname)
+		}
+	}
+}
+
+type repairingGenerator struct {
+	mockGenerator
+	repaired      []string
+	repairCalls   int
+	repairedError string
+}
+
+func (m *repairingGenerator) RepairSQL(_ context.Context, _ string, _ []string, dbError string) ([]string, error) {
+	m.repairCalls++
+	m.repairedError = dbError
+	return m.repaired, nil
+}
+
+func TestAnswerRepairsSQLRejectedByPostgres(t *testing.T) {
+	const broken = "SELECT tm_winner.canonical, COUNT(*) AS wins FROM wpl_match_info mi GROUP BY mi.winner LIMIT 20"
+	const fixed = "SELECT mi.winner, COUNT(*) AS wins FROM wpl_match_info mi GROUP BY 1 LIMIT 20"
+	repo := &mockRepositoryFunc{execFunc: func(_ context.Context, query string) (models.AIQueryResult, error) {
+		if query == broken {
+			return models.AIQueryResult{}, &pgconn.PgError{Code: "42803", Message: `column "tm_winner.canonical" must appear in the GROUP BY clause`}
+		}
+		return models.AIQueryResult{Data: []map[string]interface{}{{"winner": "Mumbai Indians", "wins": int64(21)}}, RowCount: 1}, nil
+	}}
+	gen := &repairingGenerator{mockGenerator: mockGenerator{queries: []string{broken}}, repaired: []string{fixed}}
+
+	res, err := New(repo, gen).Answer(context.Background(), "Delhi Capitals vs Mumbai Indians comparison")
+	if err != nil {
+		t.Fatalf("expected repaired query to succeed, got %v", err)
+	}
+	if gen.repairCalls != 1 || !strings.Contains(gen.repairedError, "GROUP BY") {
+		t.Fatalf("expected one repair call with the postgres error, got %d calls (%q)", gen.repairCalls, gen.repairedError)
+	}
+	if res.GeneratedSQL != fixed {
+		t.Fatalf("expected repaired SQL, got %q", res.GeneratedSQL)
+	}
+}
+
+func TestAnswerDoesNotRepairNonSQLDatabaseErrors(t *testing.T) {
+	var logged models.LogAIRequestParams
+	repo := &loggingRepository{
+		mockRepositoryFunc: mockRepositoryFunc{execFunc: func(_ context.Context, _ string) (models.AIQueryResult, error) {
+			return models.AIQueryResult{}, context.DeadlineExceeded
+		}},
+		onLog: func(p models.LogAIRequestParams) { logged = p },
+	}
+	gen := &repairingGenerator{mockGenerator: mockGenerator{queries: []string{"SELECT 1 LIMIT 1"}}}
+
+	if _, err := New(repo, gen).Answer(context.Background(), "Most ducks in IPL"); err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if gen.repairCalls != 0 {
+		t.Fatalf("expected no repair for timeouts, got %d", gen.repairCalls)
+	}
+	if logged.GeneratedSQL == nil || *logged.GeneratedSQL != "SELECT 1 LIMIT 1" {
+		t.Fatalf("expected failing SQL to be logged, got %v", logged.GeneratedSQL)
+	}
+}
+
+type loggingRepository struct {
+	mockRepositoryFunc
+	onLog func(models.LogAIRequestParams)
+}
+
+func (m *loggingRepository) LogAIRequest(_ context.Context, params models.LogAIRequestParams) (string, error) {
+	m.onLog(params)
+	return "log-1", nil
+}

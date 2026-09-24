@@ -163,3 +163,32 @@ func TestJevClientServerErrorFailsUnavailable(t *testing.T) {
 		t.Fatalf("expected ErrJevUnavailable on 500 error, got %v", err)
 	}
 }
+
+func TestJevClientCachesClassification(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		noul := 0.99
+		intent := "leading_run_scorers"
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(JevResponse{Answers: map[string]JevAnswer{
+			"is_cricket": {Noul: &noul},
+			"intent":     {Choice: &intent, Confidence: 0.99},
+		}})
+	}))
+	defer server.Close()
+
+	client := NewJevClient(JevConfig{APIKey: "test-key", BaseURL: server.URL})
+	for _, q := range []string{"Top run scorers in IPL", "  top run scorers in ipl "} {
+		classification, err := client.ClassifyCricketQuery(context.Background(), q)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if classification.Intent != "leading_run_scorers" || classification.CricketScore != 0.99 {
+			t.Fatalf("unexpected classification: %+v", classification)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("expected 1 upstream call, got %d", calls)
+	}
+}
