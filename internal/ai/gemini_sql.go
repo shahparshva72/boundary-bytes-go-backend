@@ -70,6 +70,26 @@ func NewGeminiSQLService(config GeminiSQLConfig) *GeminiSQLService {
 }
 
 func (s *GeminiSQLService) GenerateSQL(ctx context.Context, question string) ([]string, error) {
+	return s.generate(ctx, question)
+}
+
+// RepairSQL asks Gemini to correct queries that PostgreSQL rejected, feeding back the
+// failing SQL and the database error so the model can fix the specific mistake.
+func (s *GeminiSQLService) RepairSQL(ctx context.Context, question string, failedQueries []string, dbError string) ([]string, error) {
+	prompt := fmt.Sprintf(`Question: %s
+
+Your previous answer failed when executed in PostgreSQL.
+Previous queries:
+%s
+
+PostgreSQL error: %s
+
+Return corrected queries that answer the same question, following every rule above. Fix the cause of the error; do not simplify the question away.`,
+		question, strings.Join(failedQueries, "\n\n"), dbError)
+	return s.generate(ctx, prompt)
+}
+
+func (s *GeminiSQLService) generate(ctx context.Context, userText string) ([]string, error) {
 	if s == nil || s.apiKey == "" {
 		return nil, ErrMissingAPIKey
 	}
@@ -81,7 +101,7 @@ func (s *GeminiSQLService) GenerateSQL(ctx context.Context, question string) ([]
 		Contents: []geminiContent{
 			{
 				Role:  "user",
-				Parts: []geminiPart{{Text: question}},
+				Parts: []geminiPart{{Text: userText}},
 			},
 		},
 		GenerationConfig: geminiGenerationConfig{
@@ -311,9 +331,15 @@ When returning or grouping team names, normalize known variants using a CTE name
 ('Delhi Daredevils','Delhi Capitals'),
 ('Kings XI Punjab','Punjab Kings'),
 ('Rising Pune Supergiants','Rising Pune Supergiant').
-Use COALESCE(tm.canonical, team_field) in SELECT and GROUP BY.
-The team_map CTE may use alias tm.
+Select the normalized name as COALESCE(tm.canonical, team_field) AS team and group by its ordinal position.
+Define team_map once per query. When more than one team column needs normalizing (e.g. d.batting_team and mi.winner), prefer doing all normalization in a CTE first and aggregating over that CTE's plain columns; never select a team_map column (tm.canonical, tm_winner.canonical, ...) that is not itself grouped.
 When filtering on a user-supplied abbreviation, compare the normalized team field to the canonical name, not the abbreviation.
+
+GROUP BY RULES (PostgreSQL rejects violations with SQLSTATE 42803):
+- Every non-aggregated SELECT column must be covered by GROUP BY. Group by ordinal position, e.g. GROUP BY 1 or GROUP BY 1, 2, so SELECT and GROUP BY can never drift apart.
+- ORDER BY must use output aliases or aggregate expressions, never raw columns that are not grouped.
+- Columns used only in FILTER/CASE inside an aggregate do not need grouping.
+- Minimum-volume thresholds ("minimum 100 balls", "at least 20 overs") go in HAVING, never WHERE.
 
 MATCH PHASES:
 - Over Number: CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) AS over_number.
@@ -441,7 +467,7 @@ LEFT JOIN team_map tm ON tm.variant = d.batting_team
 JOIN wpl_person_registry pr ON pr.match_id = d.match_id AND pr.person_name = d.bowler
 JOIN player_style ps ON ps.identifier = pr.registry_id
 WHERE m.league = 'IPL' AND d.innings <= 2 AND m.start_date >= '2020-01-01' AND COALESCE(tm.canonical, d.batting_team) = 'Royal Challengers Bangalore' AND CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) BETWEEN 6 AND 14 AND ps.bowling_type = 'spin'
-GROUP BY COALESCE(tm.canonical, d.batting_team)
+GROUP BY 1
 LIMIT 20;
 
 Team win/loss record in matches where a team faced spin in middle overs since 2020:
@@ -461,6 +487,29 @@ FROM qualifying_matches q
 JOIN wpl_match_info mi ON mi.match_id = q.match_id
 LEFT JOIN team_map wm ON wm.variant = mi.winner
 GROUP BY q.team
+LIMIT 20;
+
+Team vs team comparison / head-to-head record (e.g. "Delhi Capitals vs Mumbai Indians"):
+WITH team_map AS (
+  SELECT * FROM (VALUES ('Delhi Daredevils','Delhi Capitals'), ('Royal Challengers Bengaluru','Royal Challengers Bangalore'), ('Kings XI Punjab','Punjab Kings'), ('Rising Pune Supergiants','Rising Pune Supergiant')) AS t(variant, canonical)
+), match_teams AS (
+  SELECT DISTINCT d.match_id, COALESCE(tb.canonical, d.batting_team) AS team, COALESCE(tw.canonical, mi.winner) AS winner
+  FROM wpl_delivery d
+  JOIN wpl_match m ON m.match_id = d.match_id
+  JOIN wpl_match_info mi ON mi.match_id = d.match_id
+  LEFT JOIN team_map tb ON tb.variant = d.batting_team
+  LEFT JOIN team_map tw ON tw.variant = mi.winner
+  WHERE m.league = 'IPL' AND d.innings <= 2
+), head_to_head AS (
+  SELECT a.match_id, a.team, a.winner
+  FROM match_teams a
+  JOIN match_teams b ON b.match_id = a.match_id AND b.team <> a.team
+  WHERE a.team IN ('Delhi Capitals', 'Mumbai Indians') AND b.team IN ('Delhi Capitals', 'Mumbai Indians')
+)
+SELECT team, COUNT(*) AS matches, COUNT(*) FILTER (WHERE winner = team) AS wins, COUNT(*) FILTER (WHERE winner IS NOT NULL AND winner <> team) AS losses, COUNT(*) FILTER (WHERE winner IS NULL) AS no_result, ROUND((COUNT(*) FILTER (WHERE winner = team)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE winner IS NOT NULL), 0), 2) AS win_pct
+FROM head_to_head
+GROUP BY 1
+ORDER BY wins DESC
 LIMIT 20;
 
 OUTPUT CONTRACT:

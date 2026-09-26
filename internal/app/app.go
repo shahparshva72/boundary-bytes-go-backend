@@ -16,6 +16,8 @@ type App struct {
 	config *config.Config
 	db     postgres.Service
 	server *httpserver.Server
+
+	stopBackground context.CancelFunc
 }
 
 func New() (*App, error) {
@@ -47,16 +49,33 @@ func New() (*App, error) {
 		log.Println("Warning: text-to-sql rate limiting disabled (missing UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, or RATE_LIMIT_IP_HASH_SECRET)")
 	}
 
+	backgroundCtx, stopBackground := context.WithCancel(context.Background())
+
+	var jevClassifier *ai.JevClient
+	if cfg.TypeSafe.Enabled() {
+		jevClassifier = ai.NewJevClient(ai.JevConfig{
+			APIKey:  cfg.TypeSafe.APIKey,
+			BaseURL: cfg.TypeSafe.BaseURL,
+			Timeout: cfg.TypeSafe.Timeout,
+		})
+		go jevClassifier.KeepWarm(backgroundCtx)
+		log.Println("TypeSafe AI (Jev System One) classifier enabled for fast cricket stats routing and guardrails")
+	} else {
+		log.Println("Notice: TypeSafe AI (Jev) disabled (missing TYPESAFE_API_KEY), queries will default to Gemini")
+	}
+
 	server := httpserver.New(httpserver.Dependencies{
 		DB:           db,
 		SQLGenerator: sqlGenerator,
+		Classifier:   jevClassifier,
 		RateLimiter:  dailyLimiter,
 	})
 
 	return &App{
-		config: cfg,
-		db:     db,
-		server: server,
+		config:         cfg,
+		db:             db,
+		server:         server,
+		stopBackground: stopBackground,
 	}, nil
 }
 
@@ -70,6 +89,9 @@ func (a *App) Run() error {
 
 func (a *App) Shutdown(ctx context.Context) error {
 	var errs []error
+	if a.stopBackground != nil {
+		a.stopBackground()
+	}
 	if err := a.server.Shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("shutdown http server: %w", err))
 	}

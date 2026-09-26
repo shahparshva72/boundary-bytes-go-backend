@@ -1,6 +1,15 @@
 package texttosql
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	aisql "github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
+)
 
 func TestValidateQuestionRejectsInvalidCharacters(t *testing.T) {
 	message := validateQuestion("top scorers <script>")
@@ -33,4 +42,420 @@ func TestNormalizeTeamResultsAggregatesCanonicalTeamNames(t *testing.T) {
 	if got[0]["wins"] != float64(5) {
 		t.Fatalf("wins = %v, want 5", got[0]["wins"])
 	}
+}
+
+type mockClassifier struct {
+	classification *aisql.CricketClassification
+	err            error
+}
+
+func (m *mockClassifier) ClassifyCricketQuery(_ context.Context, _ string) (*aisql.CricketClassification, error) {
+	return m.classification, m.err
+}
+
+type mockGenerator struct {
+	queries []string
+	err     error
+	called  bool
+}
+
+func (m *mockGenerator) GenerateSQL(_ context.Context, _ string) ([]string, error) {
+	m.called = true
+	return m.queries, m.err
+}
+
+type mockRepository struct {
+	executedQuery string
+	result        models.AIQueryResult
+	err           error
+}
+
+func (m *mockRepository) ExecuteAIQuery(_ context.Context, query string) (models.AIQueryResult, error) {
+	m.executedQuery = query
+	return m.result, m.err
+}
+
+func (m *mockRepository) LogAIRequest(_ context.Context, _ models.LogAIRequestParams) (string, error) {
+	return "req-test-123", nil
+}
+
+func TestAnswerRejectsNonCricketQueryWithJevGuardrail(t *testing.T) {
+	repo := &mockRepository{}
+	gen := &mockGenerator{queries: []string{"SELECT 1"}}
+	classifier := &mockClassifier{
+		classification: &aisql.CricketClassification{
+			IsCricket:  false,
+			Confidence: 0.95,
+		},
+	}
+
+	svc := New(repo, gen).WithClassifier(classifier)
+	_, err := svc.Answer(context.Background(), "What is the capital of France?")
+	if err == nil {
+		t.Fatal("expected error for non-cricket query, got nil")
+	}
+
+	aiErr, ok := err.(*Error)
+	if !ok {
+		t.Fatalf("expected *Error, got %T", err)
+	}
+	if aiErr.Code != CodeValidation {
+		t.Fatalf("expected code VALIDATION_ERROR, got %s", aiErr.Code)
+	}
+	if gen.called {
+		t.Fatal("expected Gemini generator to NOT be called when rejected by Jev guardrail")
+	}
+}
+
+func TestAnswerFastRoutesWithJev(t *testing.T) {
+	repo := &mockRepository{
+		result: models.AIQueryResult{
+			Data: []map[string]interface{}{
+				{"striker": "Virat Kohli", "runs": int64(639)},
+			},
+			RowCount:        1,
+			ExecutionTimeMS: 8,
+		},
+	}
+	gen := &mockGenerator{queries: []string{"SELECT 1"}}
+	classifier := &mockClassifier{
+		classification: &aisql.CricketClassification{
+			IsCricket:  true,
+			Intent:     "leading_run_scorers",
+			League:     "IPL",
+			Confidence: 0.95,
+		},
+	}
+
+	svc := New(repo, gen).WithClassifier(classifier)
+	res, err := svc.Answer(context.Background(), "Top run scorers in IPL 2023")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if res.RoutedBy != "jev" {
+		t.Fatalf("expected RoutedBy to be 'jev', got %q", res.RoutedBy)
+	}
+	if gen.called {
+		t.Fatal("expected Gemini generator to NOT be called on fast-path route")
+	}
+	if len(res.Data) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(res.Data))
+	}
+}
+
+func TestAnswerFallsBackToGeminiWhenJevClassifiesComplex(t *testing.T) {
+	repo := &mockRepository{
+		result: models.AIQueryResult{
+			Data: []map[string]interface{}{
+				{"player": "MS Dhoni", "runs": int64(50)},
+			},
+			RowCount:        1,
+			ExecutionTimeMS: 12,
+		},
+	}
+	gen := &mockGenerator{
+		queries: []string{"SELECT d.striker, SUM(d.runs_off_bat) AS runs FROM wpl_delivery d WHERE d.innings <= 2 GROUP BY d.striker LIMIT 10"},
+	}
+	classifier := &mockClassifier{
+		classification: &aisql.CricketClassification{
+			IsCricket:  true,
+			Intent:     "complex_query",
+			Confidence: 0.70,
+		},
+	}
+
+	svc := New(repo, gen).WithClassifier(classifier)
+	res, err := svc.Answer(context.Background(), "Who scored more than 50 in death overs in finals?")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if res.RoutedBy != "gemini" {
+		t.Fatalf("expected RoutedBy to be 'gemini', got %q", res.RoutedBy)
+	}
+	if !gen.called {
+		t.Fatal("expected Gemini generator to be called for complex query")
+	}
+}
+
+func TestBuildFastPathQueries(t *testing.T) {
+	// 1. Leaderboards
+	q1 := buildFastPathQueries("leading_run_scorers", "IPL", "all", "top run scorers in IPL 2023")
+	if len(q1) != 1 {
+		t.Fatalf("expected 1 query for leading_run_scorers, got %d", len(q1))
+	}
+	val1 := aisql.ValidateSQL(q1[0])
+	if !val1.IsValid {
+		t.Fatalf("invalid SQL for q1: %v", val1.Errors)
+	}
+
+	// 2. Bowling (economy rate calculation and dynamic limit)
+	q2 := buildFastPathQueries("leading_wicket_takers", "WPL", "death", "Top 5 wicket takers in WPL")
+	if len(q2) != 1 {
+		t.Fatalf("expected 1 query for leading_wicket_takers, got %d", len(q2))
+	}
+	val2 := aisql.ValidateSQL(q2[0])
+	if !val2.IsValid {
+		t.Fatalf("invalid SQL for q2: %v", val2.Errors)
+	}
+	// Economy rate must calculate across ALL balls (not just wicket-taking balls)
+	whereIdx := strings.LastIndex(q2[0], " WHERE ")
+	groupByIdx := strings.Index(q2[0], " GROUP BY ")
+	whereClause := q2[0][whereIdx:groupByIdx]
+	if strings.Contains(whereClause, "player_dismissed") {
+		t.Fatalf("expected main WHERE clause to NOT filter out non-wicket deliveries: %s", whereClause)
+	}
+	if !strings.Contains(q2[0], "LIMIT 5") {
+		t.Fatalf("expected query to respect Top 5 limit, got: %s", q2[0])
+	}
+
+	// 3. Sixes
+	q3 := buildFastPathQueries("most_sixes", "IPL", "all", "most sixes in IPL")
+	if len(q3) != 1 {
+		t.Fatalf("expected 1 query for most_sixes, got %d", len(q3))
+	}
+
+	// 4. Team wins
+	q4 := buildFastPathQueries("team_record", "IPL", "all", "which team won the most matches")
+	if len(q4) != 1 {
+		t.Fatalf("expected 1 query for team_record, got %d", len(q4))
+	}
+
+	// 5. Single player batting (2 queries: lookup + main)
+	q5 := buildFastPathQueries("player_batting_stat", "IPL", "all", "Virat Kohli runs in IPL 2023")
+	if len(q5) != 2 {
+		t.Fatalf("expected 2 queries for player_batting_stat, got %d", len(q5))
+	}
+
+	// 6. Head to head (3 queries: 2 lookups + main)
+	q6 := buildFastPathQueries("head_to_head", "IPL", "all", "Virat Kohli vs Jasprit Bumrah")
+	if len(q6) != 3 {
+		t.Fatalf("expected 3 queries for head_to_head, got %d", len(q6))
+	}
+	if err := aisql.ValidateSequentialQueries(q6); err != nil {
+		t.Fatalf("head to head sequential queries failed validation: %v", err)
+	}
+
+	// 7. Complex query returns nil for Gemini fallback
+	qComplex := buildFastPathQueries("complex_query", "IPL", "all", "some complex question")
+	if qComplex != nil {
+		t.Fatalf("expected nil for complex_query to trigger Gemini fallback, got %v", qComplex)
+	}
+
+	// 8. Player query without player name returns nil for Gemini fallback
+	qNoPlayer := buildFastPathQueries("player_batting_stat", "BBL", "all", "Highest strike rates in BBL")
+	if qNoPlayer != nil {
+		t.Fatalf("expected nil for player_batting_stat without named player, got %v", qNoPlayer)
+	}
+}
+
+func TestExtractPlayerNameWithStopwords(t *testing.T) {
+	full, surname := extractPlayerName("Highest strike rates in BBL")
+	if full != "" || surname != "" {
+		t.Fatalf("expected empty player name for 'Highest strike rates in BBL', got full=%q surname=%q", full, surname)
+	}
+
+	full, surname = extractPlayerName("Virat Kohli runs in IPL")
+	if full != "Virat Kohli" || surname != "Kohli" {
+		t.Fatalf("expected 'Virat Kohli' / 'Kohli', got full=%q surname=%q", full, surname)
+	}
+}
+
+func TestAnswerFallsBackToGeminiWhenFastTemplateFails(t *testing.T) {
+	// First query (fast-template) fails in repository, triggering fallback to Gemini
+	callCount := 0
+	repo := &mockRepositoryFunc{
+		execFunc: func(ctx context.Context, query string) (models.AIQueryResult, error) {
+			callCount++
+			if callCount == 1 {
+				return models.AIQueryResult{}, errors.New("template lookup error: relation does not exist")
+			}
+			return models.AIQueryResult{
+				Data: []map[string]interface{}{
+					{"striker": "Glenn Maxwell", "strike_rate": 160.5},
+				},
+				RowCount:        1,
+				ExecutionTimeMS: 15,
+			}, nil
+		},
+	}
+
+	gen := &mockGenerator{
+		queries: []string{"SELECT d.striker, ROUND(SUM(d.runs_off_bat)*100.0/COUNT(*), 2) AS strike_rate FROM wpl_delivery d GROUP BY d.striker LIMIT 10"},
+	}
+
+	classifier := &mockClassifier{
+		classification: &aisql.CricketClassification{
+			IsCricket:  true,
+			Intent:     "leading_run_scorers",
+			League:     "BBL",
+			Confidence: 0.90,
+		},
+	}
+
+	svc := New(repo, gen).WithClassifier(classifier)
+	res, err := svc.Answer(context.Background(), "Top run scorers in BBL")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if res.RoutedBy != "gemini" {
+		t.Fatalf("expected RoutedBy to be 'gemini' after fallback, got %q", res.RoutedBy)
+	}
+	if !gen.called {
+		t.Fatal("expected Gemini generator to be called as fallback after fast template execution failure")
+	}
+}
+
+type mockRepositoryFunc struct {
+	execFunc func(ctx context.Context, query string) (models.AIQueryResult, error)
+}
+
+func (m *mockRepositoryFunc) ExecuteAIQuery(ctx context.Context, query string) (models.AIQueryResult, error) {
+	if m.execFunc != nil {
+		return m.execFunc(ctx, query)
+	}
+	return models.AIQueryResult{}, nil
+}
+
+func (m *mockRepositoryFunc) LogAIRequest(ctx context.Context, params models.LogAIRequestParams) (string, error) {
+	return "log-1", nil
+}
+
+func TestExtractHeadToHeadPlayersUppercaseSeparator(t *testing.T) {
+	batter, bowler := extractHeadToHeadPlayers("Kohli VS Bumrah")
+	if batter != "Kohli" || bowler != "Bumrah" {
+		t.Fatalf("expected Kohli/Bumrah, got %q/%q", batter, bowler)
+	}
+}
+
+func TestBuildFastPathQueriesPrefersWBBLOverBBL(t *testing.T) {
+	queries := buildFastPathQueries("leading_run_scorers", "unknown", "all", "top run scorers in WBBL")
+	if len(queries) != 1 || !strings.Contains(queries[0], "m.league = 'WBBL'") {
+		t.Fatalf("expected WBBL league filter, got %v", queries)
+	}
+}
+
+func TestAnswerDoesNotRejectAmbiguousCricketScore(t *testing.T) {
+	repo := &mockRepository{result: models.AIQueryResult{Data: []map[string]interface{}{{"x": int64(1)}}}}
+	gen := &mockGenerator{queries: []string{"SELECT 1"}}
+	classifier := &mockClassifier{
+		classification: &aisql.CricketClassification{
+			IsCricket:    false,
+			CricketScore: 0.55,
+			Intent:       "complex_query",
+			Confidence:   0.95,
+		},
+	}
+
+	svc := New(repo, gen).WithClassifier(classifier)
+	if _, err := svc.Answer(context.Background(), "Who has the best record at Chepauk?"); err != nil {
+		t.Fatalf("expected ambiguous query to fall through to Gemini, got %v", err)
+	}
+	if !gen.called {
+		t.Fatal("expected Gemini generator to be called for ambiguous query")
+	}
+}
+
+func TestAnswerReusesCachedQueryResult(t *testing.T) {
+	executions := 0
+	repo := &mockRepositoryFunc{execFunc: func(_ context.Context, _ string) (models.AIQueryResult, error) {
+		executions++
+		return models.AIQueryResult{Data: []map[string]interface{}{{"striker": "V Kohli", "runs": int64(8004)}}, RowCount: 1}, nil
+	}}
+	gen := &mockGenerator{queries: []string{"SELECT 1"}}
+	classifier := &mockClassifier{classification: &aisql.CricketClassification{
+		IsCricket: true, CricketScore: 0.99, Intent: "leading_run_scorers", League: "IPL", Confidence: 0.99,
+	}}
+
+	svc := New(repo, gen).WithClassifier(classifier)
+	for i := 0; i < 2; i++ {
+		res, err := svc.Answer(context.Background(), "Top run scorers in IPL")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.RowCount != 1 {
+			t.Fatalf("expected 1 row, got %d", res.RowCount)
+		}
+	}
+	if executions != 1 {
+		t.Fatalf("expected 1 database execution, got %d", executions)
+	}
+}
+
+func TestExtractPlayerNameIgnoresStatTypeWords(t *testing.T) {
+	for _, q := range []string{"Kohli batting stats in IPL", "Bumrah bowling figures in IPL", "show me Kohli batting performance"} {
+		_, surname := extractPlayerName(q)
+		if surname != "Kohli" && surname != "Bumrah" {
+			t.Fatalf("%q: expected player surname, got %q", q, surname)
+		}
+	}
+}
+
+type repairingGenerator struct {
+	mockGenerator
+	repaired      []string
+	repairCalls   int
+	repairedError string
+}
+
+func (m *repairingGenerator) RepairSQL(_ context.Context, _ string, _ []string, dbError string) ([]string, error) {
+	m.repairCalls++
+	m.repairedError = dbError
+	return m.repaired, nil
+}
+
+func TestAnswerRepairsSQLRejectedByPostgres(t *testing.T) {
+	const broken = "SELECT tm_winner.canonical, COUNT(*) AS wins FROM wpl_match_info mi GROUP BY mi.winner LIMIT 20"
+	const fixed = "SELECT mi.winner, COUNT(*) AS wins FROM wpl_match_info mi GROUP BY 1 LIMIT 20"
+	repo := &mockRepositoryFunc{execFunc: func(_ context.Context, query string) (models.AIQueryResult, error) {
+		if query == broken {
+			return models.AIQueryResult{}, &pgconn.PgError{Code: "42803", Message: `column "tm_winner.canonical" must appear in the GROUP BY clause`}
+		}
+		return models.AIQueryResult{Data: []map[string]interface{}{{"winner": "Mumbai Indians", "wins": int64(21)}}, RowCount: 1}, nil
+	}}
+	gen := &repairingGenerator{mockGenerator: mockGenerator{queries: []string{broken}}, repaired: []string{fixed}}
+
+	res, err := New(repo, gen).Answer(context.Background(), "Delhi Capitals vs Mumbai Indians comparison")
+	if err != nil {
+		t.Fatalf("expected repaired query to succeed, got %v", err)
+	}
+	if gen.repairCalls != 1 || !strings.Contains(gen.repairedError, "GROUP BY") {
+		t.Fatalf("expected one repair call with the postgres error, got %d calls (%q)", gen.repairCalls, gen.repairedError)
+	}
+	if res.GeneratedSQL != fixed {
+		t.Fatalf("expected repaired SQL, got %q", res.GeneratedSQL)
+	}
+}
+
+func TestAnswerDoesNotRepairNonSQLDatabaseErrors(t *testing.T) {
+	var logged models.LogAIRequestParams
+	repo := &loggingRepository{
+		mockRepositoryFunc: mockRepositoryFunc{execFunc: func(_ context.Context, _ string) (models.AIQueryResult, error) {
+			return models.AIQueryResult{}, context.DeadlineExceeded
+		}},
+		onLog: func(p models.LogAIRequestParams) { logged = p },
+	}
+	gen := &repairingGenerator{mockGenerator: mockGenerator{queries: []string{"SELECT 1 LIMIT 1"}}}
+
+	if _, err := New(repo, gen).Answer(context.Background(), "Most ducks in IPL"); err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if gen.repairCalls != 0 {
+		t.Fatalf("expected no repair for timeouts, got %d", gen.repairCalls)
+	}
+	if logged.GeneratedSQL == nil || *logged.GeneratedSQL != "SELECT 1 LIMIT 1" {
+		t.Fatalf("expected failing SQL to be logged, got %v", logged.GeneratedSQL)
+	}
+}
+
+type loggingRepository struct {
+	mockRepositoryFunc
+	onLog func(models.LogAIRequestParams)
+}
+
+func (m *loggingRepository) LogAIRequest(_ context.Context, params models.LogAIRequestParams) (string, error) {
+	m.onLog(params)
+	return "log-1", nil
 }

@@ -27,6 +27,7 @@ type textToSQLMetadata struct {
 	RowCount      int    `json:"rowCount"`
 	ExecutionTime int    `json:"executionTime"`
 	GeneratedSQL  string `json:"generatedSql"`
+	RoutedBy      string `json:"routedBy,omitempty"`
 }
 
 type apiErrorResponse struct {

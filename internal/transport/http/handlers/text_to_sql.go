@@ -60,6 +60,7 @@ func TextToSQL(service *texttosql.Service, limiter *ratelimit.DailyLimiter) http
 				RowCount:      result.RowCount,
 				ExecutionTime: result.ExecutionTimeMS,
 				GeneratedSQL:  result.GeneratedSQL,
+				RoutedBy:      result.RoutedBy,
 			},
 			RequestID: result.RequestID,
 		}

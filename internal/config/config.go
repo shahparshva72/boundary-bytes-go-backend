@@ -14,6 +14,7 @@ type Config struct {
 	Port      string
 	DB        DBConfig
 	AI        AIConfig
+	TypeSafe  TypeSafeConfig
 	RateLimit RateLimitConfig
 }
 
@@ -30,6 +31,16 @@ type AIConfig struct {
 	GoogleAPIKey string
 	GeminiModel  string
 	Timeout      time.Duration
+}
+
+type TypeSafeConfig struct {
+	APIKey  string
+	BaseURL string
+	Timeout time.Duration
+}
+
+func (c TypeSafeConfig) Enabled() bool {
+	return c.APIKey != ""
 }
 
 type RateLimitConfig struct {
@@ -63,6 +74,11 @@ func Load() *Config {
 			GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash"),
 			Timeout:      time.Duration(getEnvInt("AI_TIMEOUT_SECONDS", 20)) * time.Second,
 		},
+		TypeSafe: TypeSafeConfig{
+			APIKey:  getEnv("TYPESAFE_API_KEY", ""),
+			BaseURL: getEnv("TYPESAFE_BASE_URL", "https://api.typesafe.ai/v1/systemone"),
+			Timeout: time.Duration(getEnvInt("TYPESAFE_TIMEOUT_MS", 2000)) * time.Millisecond,
+		},
 		RateLimit: RateLimitConfig{
 			UpstashURL:   getEnv("UPSTASH_REDIS_REST_URL", ""),
 			UpstashToken: getEnv("UPSTASH_REDIS_REST_TOKEN", ""),
@@ -91,6 +107,20 @@ func getEnvInt(key string, fallback int) int {
 	}
 
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	value, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}

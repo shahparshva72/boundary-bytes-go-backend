@@ -24,6 +24,7 @@ import (
 type Dependencies struct {
 	DB           postgres.Service
 	SQLGenerator ai.SQLGenerator
+	Classifier   texttosql.QueryClassifier
 	RateLimiter  *ratelimit.DailyLimiter
 }
 
@@ -45,6 +46,9 @@ func New(deps Dependencies) *Server {
 	playersService := playersservice.New(deps.DB, statsService)
 	statsExplorerService := statsexplorerservice.New(deps.DB)
 	textToSQLService := texttosql.New(deps.DB, deps.SQLGenerator)
+	if deps.Classifier != nil {
+		textToSQLService.WithClassifier(deps.Classifier)
+	}
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
