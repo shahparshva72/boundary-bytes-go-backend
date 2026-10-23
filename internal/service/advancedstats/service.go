@@ -7,7 +7,7 @@ import (
 )
 
 type Repository interface {
-	GetAdvancedStats(ctx context.Context, league, playerType string, player string, overs []int) (interface{}, int, error)
+	GetAdvancedStats(ctx context.Context, league, playerType string, player string, overs []int, phase string) (interface{}, int, error)
 	GetAllLeagues(ctx context.Context) ([]string, error)
 	GetBowlingWicketTypes(ctx context.Context, league string, page, limit int) ([]models.BowlingWicketTypesItem, int, error)
 	GetFallOfWickets(ctx context.Context, league string, matchID int) (*models.FallOfWicketsResponse, error)
@@ -81,8 +81,8 @@ func (s *Service) GetPlayerProgression(ctx context.Context, league, player strin
 	return &PlayerProgressionResult{Items: items, Metadata: metadata}, nil
 }
 
-func (s *Service) GetAdvancedStats(ctx context.Context, league, playerType, player string, overs []int) (*AdvancedStatsResult, error) {
-	data, deliveryCount, err := s.repository.GetAdvancedStats(ctx, league, playerType, player, overs)
+func (s *Service) GetAdvancedStats(ctx context.Context, league, playerType, player string, overs []int, phase string) (*AdvancedStatsResult, error) {
+	data, deliveryCount, err := s.repository.GetAdvancedStats(ctx, league, playerType, player, overs, phase)
 	if err != nil {
 		return nil, err
 	}

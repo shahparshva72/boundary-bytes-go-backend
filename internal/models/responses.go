@@ -178,6 +178,10 @@ type TeamRunRateProgressionResponse struct {
 }
 
 type TeamRunRateProgressionMetadata struct {
+	// OverLength is the over length the per-over points describe: 6, or 5
+	// when only The Hundred is selected. Matches of the other length are
+	// left out so over numbers mean one thing.
+	OverLength       int      `json:"overLength"`
 	TotalInnings     int      `json:"totalInnings"`
 	TotalMatches     int      `json:"totalMatches"`
 	TotalDeliveries  int      `json:"totalDeliveries"`
@@ -578,6 +582,10 @@ type PlayerProgressionResponse struct {
 }
 
 type PlayerProgressionMetadata struct {
+	// OverLength is the over length the per-over points describe: 6, or 5
+	// when only The Hundred is selected. Matches of the other length are
+	// left out so over numbers mean one thing.
+	OverLength       int      `json:"overLength"`
 	TotalInnings     int      `json:"totalInnings"`
 	TotalMatches     int      `json:"totalMatches"`
 	TotalDeliveries  int      `json:"totalDeliveries"`
@@ -619,6 +627,11 @@ type AdvancedStatsResponse struct {
 type AdvancedStatsMetadata struct {
 	AvailableLeagues   []string `json:"availableLeagues"`
 	DeliveriesAnalyzed int      `json:"deliveriesAnalyzed"`
+	// Phase is set for phase requests, which cover every match.
+	Phase string `json:"phase,omitempty"`
+	// OverLength is set for overs requests: the over length counted (6, or
+	// 5 when only The Hundred is selected).
+	OverLength int `json:"overLength,omitempty"`
 }
 
 type FallOfWicketsResponse struct {

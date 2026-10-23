@@ -307,6 +307,8 @@ func (s *service) GetTeamRunRateProgression(
 	team string,
 	season string,
 ) ([]models.TeamRunRateProgressionPoint, models.TeamRunRateProgressionMetadata, error) {
+	overLength := leagues.Default().OverLength(league)
+
 	aggregatedQuery := fmt.Sprintf(`
 		WITH standardized_deliveries AS (
 			SELECT
@@ -319,9 +321,11 @@ func (s *service) GetTeamRunRateProgression(
 				d.wides
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
+			%s
 			WHERE d.innings <= 2
 				AND m.league = ANY(string_to_array($1, ','))
 				AND m.season = $2
+				AND %s
 		)
 		SELECT
 			FLOOR(CAST(ball AS DECIMAL(10,2)))::int + 1 AS over_number,
@@ -332,7 +336,7 @@ func (s *service) GetTeamRunRateProgression(
 			AND FLOOR(CAST(ball AS DECIMAL(10,2)))::int + 1 BETWEEN 1 AND 20
 		GROUP BY over_number
 		ORDER BY over_number;
-	`, standardizedBattingTeamSQL())
+	`, standardizedBattingTeamSQL(), matchInfoJoinSQL, overLengthConditionSQL(overLength))
 
 	rows, err := s.db.QueryContext(ctx, aggregatedQuery, league, season, team)
 	if err != nil {
@@ -370,9 +374,11 @@ func (s *service) GetTeamRunRateProgression(
 				d.ball
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
+			%s
 			WHERE d.innings <= 2
 				AND m.league = ANY(string_to_array($1, ','))
 				AND m.season = $2
+				AND %s
 		)
 		SELECT
 			COUNT(DISTINCT CONCAT(match_id, '-', innings))::int AS total_innings,
@@ -380,9 +386,9 @@ func (s *service) GetTeamRunRateProgression(
 			COUNT(*)::int AS total_deliveries
 		FROM standardized_deliveries
 		WHERE team = $3;
-	`, standardizedBattingTeamSQL())
+	`, standardizedBattingTeamSQL(), matchInfoJoinSQL, overLengthConditionSQL(overLength))
 
-	metadata := models.TeamRunRateProgressionMetadata{}
+	metadata := models.TeamRunRateProgressionMetadata{OverLength: overLength}
 	if err := s.db.QueryRowContext(ctx, metadataQuery, league, season, team).Scan(
 		&metadata.TotalInnings,
 		&metadata.TotalMatches,
@@ -401,7 +407,7 @@ func (s *service) GetTeamRunRateProgression(
 
 		progression = append(progression, models.TeamRunRateProgressionPoint{
 			Over:    over,
-			Phase:   phaseForOver(over),
+			Phase:   phaseForOver(over, overLength),
 			Runs:    data.runs,
 			Balls:   data.balls,
 			RunRate: math.Round(runRate*100) / 100,
@@ -878,6 +884,7 @@ func (s *service) GetPlayerProgression(
 	player string,
 	innings *int,
 ) ([]models.PlayerProgressionPoint, models.PlayerProgressionMetadata, error) {
+	overLength := leagues.Default().OverLength(league)
 	inningsClause := "AND d.innings <= 2"
 	args := []interface{}{player, league}
 	if innings != nil && (*innings == 1 || *innings == 2) {
@@ -893,13 +900,15 @@ func (s *service) GetPlayerProgression(
 			SUM(CASE WHEN d.player_dismissed = $1 THEN 1 ELSE 0 END) AS dismissals
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
+		%s
 		WHERE d.striker = $1
 			AND m.league = ANY(string_to_array($2, ','))
+			AND %s
 			%s
 			AND FLOOR(CAST(d.ball AS DECIMAL(10,2)))::int + 1 BETWEEN 1 AND 20
 		GROUP BY FLOOR(CAST(d.ball AS DECIMAL(10,2)))::int + 1
 		ORDER BY over_number;
-	`, inningsClause)
+	`, matchInfoJoinSQL, overLengthConditionSQL(overLength), inningsClause)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -947,7 +956,7 @@ func (s *service) GetPlayerProgression(
 
 		progression = append(progression, models.PlayerProgressionPoint{
 			Over:       over,
-			Phase:      phaseForOver(over),
+			Phase:      phaseForOver(over, overLength),
 			Runs:       d.runs,
 			Balls:      d.balls,
 			Dismissals: d.dismissals,
@@ -963,10 +972,12 @@ func (s *service) GetPlayerProgression(
 			COUNT(*) AS total_deliveries
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
+		%s
 		WHERE d.striker = $1
 			AND m.league = ANY(string_to_array($2, ','))
+			AND %s
 			%s;
-	`, inningsClause)
+	`, matchInfoJoinSQL, overLengthConditionSQL(overLength), inningsClause)
 
 	var (
 		totalInnings    int
@@ -979,6 +990,7 @@ func (s *service) GetPlayerProgression(
 	}
 
 	metadata := models.PlayerProgressionMetadata{
+		OverLength:      overLength,
 		TotalInnings:    totalInnings,
 		TotalMatches:    totalMatches,
 		TotalDeliveries: totalDeliveries,
@@ -987,18 +999,37 @@ func (s *service) GetPlayerProgression(
 	return progression, metadata, nil
 }
 
+// GetAdvancedStats returns a batter's or bowler's figures for the given
+// overs (1-based, of the scope's over length) or for a phase (powerplay,
+// middle or death, across T20 and Hundred matches). Exactly one of overs and
+// phase is set by the handler.
 func (s *service) GetAdvancedStats(
 	ctx context.Context,
 	league string,
 	playerType string,
 	player string,
 	overs []int,
+	phase string,
 ) (interface{}, int, error) {
-	if len(overs) == 0 {
-		return nil, 0, errors.New("overs are required")
+	if len(overs) == 0 && phase == "" {
+		return nil, 0, errors.New("overs or phase is required")
 	}
 
-	query := `
+	field := "d.striker"
+	if playerType == "bowler" {
+		field = "d.bowler"
+	}
+
+	args := []interface{}{league, player}
+	deliveryFilter := ""
+	if phase != "" {
+		args = append(args, phase)
+		deliveryFilter = fmt.Sprintf("AND %s = $3", phaseSQL())
+	} else {
+		deliveryFilter = "AND " + overLengthConditionSQL(leagues.Default().OverLength(league))
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			d.runs_off_bat,
 			d.extras,
@@ -1006,22 +1037,18 @@ func (s *service) GetAdvancedStats(
 			d.noballs,
 			d.player_dismissed,
 			d.wicket_type,
-			d.ball
+			d.ball,
+			COALESCE(mi.balls_per_over, 6)
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
+		%s
 		WHERE m.league = ANY(string_to_array($1, ','))
 			AND d.innings <= 2
-			AND %s = $2;
-	`
+			AND %s = $2
+			%s;
+	`, matchInfoJoinSQL, field, deliveryFilter)
 
-	field := "d.striker"
-	if playerType == "bowler" {
-		field = "d.bowler"
-	}
-
-	query = fmt.Sprintf(query, field)
-
-	rows, err := s.db.QueryContext(ctx, query, league, player)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1043,10 +1070,11 @@ func (s *service) GetAdvancedStats(
 			&d.playerDismissed,
 			&d.wicketType,
 			&d.ball,
+			&d.ballsPerOver,
 		); err != nil {
 			return nil, 0, err
 		}
-		if overFromBall(d.ball, oversSet) {
+		if phase != "" || overFromBall(d.ball, oversSet) {
 			deliveries = append(deliveries, d)
 		}
 	}
@@ -1239,16 +1267,6 @@ func (s *service) GetFallOfWickets(
 	return response, nil
 }
 
-func phaseForOver(over int) string {
-	if over <= 6 {
-		return "powerplay"
-	}
-	if over <= 15 {
-		return "middle"
-	}
-	return "death"
-}
-
 func overFromBall(ball string, allowed map[int]bool) bool {
 	if ball == "" {
 		return false
@@ -1383,6 +1401,7 @@ func calculateAdvancedBowlerStats(deliveries []deliveryRow) models.AdvancedStats
 	dots := 0
 	wides := 0
 	noballs := 0
+	ballsPerOver := 0 // 0 once deliveries mix over lengths
 
 	bowlerWicketTypes := map[string]bool{
 		"bowled":            true,
@@ -1393,7 +1412,13 @@ func calculateAdvancedBowlerStats(deliveries []deliveryRow) models.AdvancedStats
 		"hit wicket":        true,
 	}
 
-	for _, d := range deliveries {
+	for i, d := range deliveries {
+		if i == 0 {
+			ballsPerOver = d.ballsPerOver
+		} else if d.ballsPerOver != ballsPerOver {
+			ballsPerOver = 0
+		}
+
 		runsConceded += d.runsOffBat
 		if d.wides > 0 {
 			runsConceded += d.wides
@@ -1403,7 +1428,8 @@ func calculateAdvancedBowlerStats(deliveries []deliveryRow) models.AdvancedStats
 			runsConceded += d.noballs
 			noballs++
 		}
-		if d.wides == 0 {
+		// Wides and no-balls are re-bowled, so neither is a legal delivery.
+		if d.wides == 0 && d.noballs == 0 {
 			ballsBowled++
 			if d.runsOffBat == 0 && d.extras == 0 {
 				dots++
@@ -1416,10 +1442,11 @@ func calculateAdvancedBowlerStats(deliveries []deliveryRow) models.AdvancedStats
 		}
 	}
 
-	overs := float64(ballsBowled/6) + float64(ballsBowled%6)/10
+	// Economy is runs per six legal balls, the same in every format and
+	// consistent with the other endpoints.
 	economyRate := 0.0
-	if overs > 0 {
-		economyRate = float64(runsConceded) / overs
+	if ballsBowled > 0 {
+		economyRate = float64(runsConceded) / (float64(ballsBowled) / 6)
 	}
 	average := 0.0
 	strikeRate := 0.0
@@ -1431,7 +1458,7 @@ func calculateAdvancedBowlerStats(deliveries []deliveryRow) models.AdvancedStats
 	return models.AdvancedStatsBowlerData{
 		RunsConceded: runsConceded,
 		BallsBowled:  ballsBowled,
-		Overs:        math.Round(overs*10) / 10,
+		Overs:        oversNotation(ballsBowled, ballsPerOver),
 		Wickets:      wickets,
 		EconomyRate:  math.Round(economyRate*100) / 100,
 		Average:      math.Round(average*100) / 100,
@@ -1440,6 +1467,16 @@ func calculateAdvancedBowlerStats(deliveries []deliveryRow) models.AdvancedStats
 		Wides:        wides,
 		Noballs:      noballs,
 	}
+}
+
+// oversNotation writes legal balls in cricket's overs.balls notation (22
+// balls of 6-ball overs = 3.4). It returns 0 when the deliveries mix over
+// lengths, where the notation means nothing; use ballsBowled instead.
+func oversNotation(balls, ballsPerOver int) float64 {
+	if ballsPerOver == 0 {
+		return 0
+	}
+	return float64(balls/ballsPerOver) + float64(balls%ballsPerOver)/10
 }
 
 func pqStringArray(values []string) interface{} {
@@ -1462,6 +1499,7 @@ type deliveryRow struct {
 	playerDismissed sql.NullString
 	wicketType      sql.NullString
 	ball            string
+	ballsPerOver    int
 }
 
 type playerCompareBattingRow struct {

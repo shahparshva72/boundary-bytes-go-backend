@@ -873,17 +873,21 @@ func buildStatExplorerWhereClause(
 	if len(filters.Innings) > 0 {
 		conditions = append(conditions, fmt.Sprintf("d.innings IN %s", builder.intInClause(filters.Innings)))
 	}
-	if filters.OverFrom != nil && filters.OverTo != nil {
-		conditions = append(conditions, fmt.Sprintf("CAST(SPLIT_PART(d.ball, '.', 1) AS int) BETWEEN %s AND %s", builder.addArg(*filters.OverFrom), builder.addArg(*filters.OverTo)))
-	} else if filters.OverFrom != nil {
-		conditions = append(conditions, fmt.Sprintf("CAST(SPLIT_PART(d.ball, '.', 1) AS int) >= %s", builder.addArg(*filters.OverFrom)))
-	} else if filters.OverTo != nil {
-		conditions = append(conditions, fmt.Sprintf("CAST(SPLIT_PART(d.ball, '.', 1) AS int) <= %s", builder.addArg(*filters.OverTo)))
+	// overFrom/overTo are 1-based over numbers (as in advanced stats) and
+	// count only matches of the scope's over length; see phase.go.
+	if filters.OverFrom != nil || filters.OverTo != nil {
+		conditions = append(conditions, overLengthConditionSQL(leagues.Default().OverLength(league)))
+	}
+	if filters.OverFrom != nil {
+		conditions = append(conditions, fmt.Sprintf("%s + 1 >= %s", overIndexSQL, builder.addArg(*filters.OverFrom)))
+	}
+	if filters.OverTo != nil {
+		conditions = append(conditions, fmt.Sprintf("%s + 1 <= %s", overIndexSQL, builder.addArg(*filters.OverTo)))
 	}
 	if filters.Phase != nil && *filters.Phase != "overall" {
-		phaseRanges := map[string][2]int{"powerplay": {1, 6}, "middle": {7, 15}, "death": {16, 20}}
-		if value, ok := phaseRanges[*filters.Phase]; ok {
-			conditions = append(conditions, fmt.Sprintf("CAST(SPLIT_PART(d.ball, '.', 1) AS int) BETWEEN %d AND %d", value[0], value[1]))
+		switch *filters.Phase {
+		case "powerplay", "middle", "death":
+			conditions = append(conditions, fmt.Sprintf("%s = %s", phaseSQL(), builder.addArg(*filters.Phase)))
 		}
 	}
 	if filters.ResultFilter != nil {
