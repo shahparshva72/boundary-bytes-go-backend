@@ -728,7 +728,9 @@ func buildMatchReportQueries(
 	}
 	whereClause := strings.Join(conditions, " AND ")
 
-	groupByCols := []string{"m.match_id"}
+	// wpl_match_info is a separate table, so grouping by m.match_id alone
+	// doesn't let the query select mi.* columns; its own key does.
+	groupByCols := []string{"m.match_id", "mi.match_id"}
 	for _, dimension := range request.Dimensions {
 		switch dimension {
 		case "team":
@@ -769,6 +771,16 @@ func buildMatchReportQueries(
 		"tosswinner":   `"tossWinner"`,
 		"tossdecision": `"tossDecision"`,
 		"result":       `"result"`,
+	}
+	// The other dimensions are always selected above; these two split each
+	// match into several rows, so they must be selected to label them.
+	if containsString(request.Dimensions, "team") {
+		selectCols = append(selectCols, `d.batting_team AS "team"`)
+		sortColumns["team"] = `"team"`
+	}
+	if containsString(request.Dimensions, "innings") {
+		selectCols = append(selectCols, `d.innings AS "innings"`)
+		sortColumns["innings"] = `"innings"`
 	}
 	metricKeys := map[string]bool{}
 	for _, metric := range request.Metrics {
