@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
@@ -1024,18 +1025,10 @@ func standardizeTeams(teams []string) []string {
 }
 
 func standardizeTeamName(team string) string {
-	switch team {
-	case "Royal Challengers Bengaluru":
-		return "Royal Challengers Bangalore"
-	case "Delhi Daredevils":
-		return "Delhi Capitals"
-	case "Kings XI Punjab":
-		return "Punjab Kings"
-	case "Rising Pune Supergiants":
-		return "Rising Pune Supergiant"
-	default:
-		return team
+	if merged, ok := leagues.Default().TeamRenames()[team]; ok {
+		return merged
 	}
+	return team
 }
 
 func containsString(values []string, target string) bool {

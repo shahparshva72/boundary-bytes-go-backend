@@ -69,20 +69,8 @@ func (s *service) GetMatchList(ctx context.Context, league string) ([]models.Mat
 				m.start_date,
 				m.venue,
 				STRING_AGG(DISTINCT
-					CASE
-						WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-						WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-						WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-						WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-						ELSE d.batting_team
-					END, ' vs ' ORDER BY
-					CASE
-						WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-						WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-						WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-						WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-						ELSE d.batting_team
-					END
+					` + standardizedBattingTeamSQL() + `, ' vs ' ORDER BY
+					` + standardizedBattingTeamSQL() + `
 				) AS teams
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
@@ -302,13 +290,7 @@ func (s *service) GetTeamWins(ctx context.Context, league string) ([]models.Team
 		WITH delivery_std AS (
 			SELECT
 				d.*,
-				CASE
-					WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-					WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-					WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-					WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-					ELSE d.batting_team
-				END AS std_batting_team
+				` + standardizedBattingTeamSQL() + ` AS std_batting_team
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
@@ -394,13 +376,7 @@ func (s *service) GetTeamAverages(ctx context.Context, league string) ([]models.
 	query := `
 		WITH standardized_deliveries AS (
 			SELECT
-				CASE
-					WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-					WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-					WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-					WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-					ELSE d.batting_team
-				END as team,
+				` + standardizedBattingTeamSQL() + ` as team,
 				d.match_id,
 				d.innings,
 				d.runs_off_bat,

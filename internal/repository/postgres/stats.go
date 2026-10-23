@@ -1076,20 +1076,8 @@ func (s *service) GetFallOfWickets(
 				m.start_date,
 				m.venue,
 				STRING_AGG(DISTINCT
-					CASE
-						WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-						WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-						WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-						WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-						ELSE d.batting_team
-					END, ' vs ' ORDER BY
-					CASE
-						WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-						WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-						WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-						WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-						ELSE d.batting_team
-					END
+					` + standardizedBattingTeamSQL() + `, ' vs ' ORDER BY
+					` + standardizedBattingTeamSQL() + `
 				) as teams
 			FROM wpl_match m
 			JOIN wpl_delivery d ON d.match_id = m.match_id
@@ -1131,13 +1119,7 @@ func (s *service) GetFallOfWickets(
 				d.player_dismissed,
 				d.wicket_type,
 				d.bowler,
-				CASE
-					WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-					WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-					WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-					WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-					ELSE d.batting_team
-				END as batting_team,
+				` + standardizedBattingTeamSQL() + ` as batting_team,
 				ROW_NUMBER() OVER (PARTITION BY d.match_id, d.innings ORDER BY d.ball) as wicket_number
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
