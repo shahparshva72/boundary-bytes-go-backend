@@ -111,3 +111,16 @@ func TestConflictingTeamRenameRejected(t *testing.T) {
 		t.Fatal("a variant mapped to two different teams must be rejected")
 	}
 }
+
+func TestOverLength(t *testing.T) {
+	r, err := Parse(leaguesJSON, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := map[string]int{"IPL": 6, "HND": 5, "HND,WHND": 5, "IPL,HND": 6, "": 6, "NOPE": 6}
+	for scope, want := range tests {
+		if got := r.OverLength(scope); got != want {
+			t.Errorf("OverLength(%q) = %d, want %d", scope, got, want)
+		}
+	}
+}

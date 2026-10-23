@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 	advancedstatsservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/advancedstats"
 )
@@ -160,6 +161,8 @@ func GetPlayerProgression(service *advancedstatsservice.Service) http.HandlerFun
 	}
 }
 
+var validPhases = map[string]bool{"powerplay": true, "middle": true, "death": true}
+
 func GetAdvancedStats(service *advancedstatsservice.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		league, ok := resolveLeague(w, r)
@@ -167,6 +170,7 @@ func GetAdvancedStats(service *advancedstatsservice.Service) http.HandlerFunc {
 			return
 		}
 		oversParam := r.URL.Query().Get("overs")
+		phase := r.URL.Query().Get("phase")
 		batter := r.URL.Query().Get("batter")
 		bowler := r.URL.Query().Get("bowler")
 		playerType := r.URL.Query().Get("playerType")
@@ -174,8 +178,12 @@ func GetAdvancedStats(service *advancedstatsservice.Service) http.HandlerFunc {
 			playerType = "batter"
 		}
 
-		if oversParam == "" {
-			writeError(w, http.StatusBadRequest, "overs parameter is required")
+		if (oversParam == "") == (phase == "") {
+			writeError(w, http.StatusBadRequest, "Provide either overs or phase (powerplay, middle, death)")
+			return
+		}
+		if phase != "" && !validPhases[phase] {
+			writeError(w, http.StatusBadRequest, "Invalid phase: must be powerplay, middle or death")
 			return
 		}
 		if batter == "" && bowler == "" {
@@ -185,6 +193,9 @@ func GetAdvancedStats(service *advancedstatsservice.Service) http.HandlerFunc {
 
 		overs := []int{}
 		for _, value := range strings.Split(oversParam, ",") {
+			if oversParam == "" {
+				break
+			}
 			over, err := strconv.Atoi(strings.TrimSpace(value))
 			if err != nil {
 				writeError(w, http.StatusBadRequest, "Invalid over numbers provided")
@@ -198,10 +209,17 @@ func GetAdvancedStats(service *advancedstatsservice.Service) http.HandlerFunc {
 			player = bowler
 		}
 
-		result, err := service.GetAdvancedStats(r.Context(), league, playerType, player, overs)
+		result, err := service.GetAdvancedStats(r.Context(), league, playerType, player, overs, phase)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+
+		// Over numbers count only matches of the scope's over length; a phase
+		// covers every match.
+		overLength := 0
+		if phase == "" {
+			overLength = leagues.Default().OverLength(league)
 		}
 
 		resp := models.AdvancedStatsResponse{
@@ -213,6 +231,8 @@ func GetAdvancedStats(service *advancedstatsservice.Service) http.HandlerFunc {
 			Metadata: models.AdvancedStatsMetadata{
 				AvailableLeagues:   result.Leagues,
 				DeliveriesAnalyzed: result.DeliveryCount,
+				Phase:              phase,
+				OverLength:         overLength,
 			},
 		}
 

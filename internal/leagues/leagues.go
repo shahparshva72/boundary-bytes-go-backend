@@ -29,7 +29,10 @@ type League struct {
 	Source      string            `json:"source"`
 	Events      []string          `json:"events"`
 	TeamRenames map[string]string `json:"teamRenames,omitempty"`
-	Visible     bool              `json:"visible"`
+	// BallsPerOver is 6 for T20 leagues and 5 for The Hundred, whose overs
+	// are 5-ball sets (Cricsheet's balls_per_over).
+	BallsPerOver int  `json:"ballsPerOver,omitempty"`
+	Visible      bool `json:"visible"`
 }
 
 type Registry struct {
@@ -85,6 +88,12 @@ func Parse(data []byte, showHidden bool) (*Registry, error) {
 		if showHidden {
 			l.Visible = true
 		}
+		if l.BallsPerOver == 0 {
+			l.BallsPerOver = 6
+		}
+		if l.BallsPerOver != 5 && l.BallsPerOver != 6 {
+			return nil, fmt.Errorf("league %s: ballsPerOver must be 5 or 6, got %d", l.Code, l.BallsPerOver)
+		}
 
 		// Team names are merged with one SQL expression for every league, so
 		// a variant must mean the same team wherever it appears.
@@ -133,6 +142,20 @@ func (r *Registry) VisibleCodes(gender string) []string {
 func (r *Registry) IsVisible(code string) bool {
 	l, ok := r.byCode[code]
 	return ok && l.Visible
+}
+
+// OverLength returns the over length that over-numbered stats use for a
+// scope: 5 when every league in it plays 5-ball overs (The Hundred), else 6.
+// Queries indexed by over number then count only matches of that length, so
+// "over 16" never mixes a T20 over with a Hundred set.
+func (r *Registry) OverLength(scope string) int {
+	codes := strings.Split(scope, ",")
+	for _, code := range codes {
+		if l, ok := r.byCode[strings.TrimSpace(code)]; !ok || l.BallsPerOver != 5 {
+			return 6
+		}
+	}
+	return 5
 }
 
 // ScopeError is a client error in a league/leagues/gender request.

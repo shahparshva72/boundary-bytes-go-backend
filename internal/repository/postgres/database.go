@@ -40,7 +40,7 @@ type Service interface {
 	GetBowlingWicketTypes(ctx context.Context, league string, page, limit int) ([]models.BowlingWicketTypesItem, int, error)
 	GetMultiMatchup(ctx context.Context, league, player string, opponents []string, mode string) ([]models.MultiMatchupItem, error)
 	GetPlayerProgression(ctx context.Context, league, player string, innings *int) ([]models.PlayerProgressionPoint, models.PlayerProgressionMetadata, error)
-	GetAdvancedStats(ctx context.Context, league, playerType string, player string, overs []int) (interface{}, int, error)
+	GetAdvancedStats(ctx context.Context, league, playerType string, player string, overs []int, phase string) (interface{}, int, error)
 	GetFallOfWickets(ctx context.Context, league string, matchID int) (*models.FallOfWicketsResponse, error)
 	GetMatchupStats(ctx context.Context, league, batter, bowler string) (*models.MatchupData, error)
 	GetLeadingWicketTakers(ctx context.Context, league string, page, limit int) ([]models.WicketTaker, int, error)
