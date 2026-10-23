@@ -2,35 +2,31 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"strings"
+
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 )
 
+// defaultLeague is used when a request names no league, leagues or gender.
+// It keeps today's frontend working until it sends a scope on every request.
 const defaultLeague = "WPL"
 
-var validLeagues = []string{"WPL", "IPL", "BBL", "WBBL", "SA20"}
-
-var validLeagueSet = map[string]struct{}{
-	"WPL":  {},
-	"IPL":  {},
-	"BBL":  {},
-	"WBBL": {},
-	"SA20": {},
-}
-
+// resolveLeague returns the request's league scope: a comma-separated list of
+// visible league codes (see leagues.Registry.ResolveScope). Repository queries
+// filter with m.league = ANY(string_to_array(scope, ',')), so a single-league
+// scope such as "IPL" behaves exactly as before.
 func resolveLeague(w http.ResponseWriter, r *http.Request) (string, bool) {
-	league := strings.TrimSpace(r.URL.Query().Get("league"))
-	if league == "" {
+	query := r.URL.Query()
+	scope, err := leagues.Default().ResolveScope(query.Get("league"), query.Get("leagues"), query.Get("gender"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return "", false
+	}
+	if scope == "" {
 		return defaultLeague, true
 	}
 
-	if _, ok := validLeagueSet[league]; !ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid league: %s. Valid leagues are: %s", league, strings.Join(validLeagues, ", ")))
-		return "", false
-	}
-
-	return league, true
+	return scope, true
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {

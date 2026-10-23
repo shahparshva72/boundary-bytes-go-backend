@@ -9,17 +9,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
-const standardizedBattingTeamSQL = `
-	CASE
-		WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-		WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-		WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-		WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-		ELSE d.batting_team
-	END`
+// standardizedBattingTeamSQL() merges renamed franchises in d.batting_team
+// using the teamRenames in leagues.json.
+func standardizedBattingTeamSQL() string {
+	return leagues.Default().TeamNameSQL("d.batting_team")
+}
 
 func (s *service) GetBowlingWicketTypes(
 	ctx context.Context,
@@ -52,7 +50,7 @@ func (s *service) GetBowlingWicketTypes(
 			COUNT(DISTINCT d.match_id) as matches
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
-		WHERE m.league = $1 AND d.innings <= 2
+		WHERE m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
 		GROUP BY d.bowler
 		HAVING COUNT(*) FILTER (
 			WHERE d.player_dismissed IS NOT NULL
@@ -121,7 +119,7 @@ func (s *service) GetBowlingWicketTypes(
 			SELECT d.bowler
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
-			WHERE m.league = $1
+			WHERE m.league = ANY(string_to_array($1, ','))
 			GROUP BY d.bowler
 			HAVING COUNT(*) FILTER (
 				WHERE d.player_dismissed IS NOT NULL
@@ -182,7 +180,7 @@ func (s *service) GetMultiMatchup(
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.striker = $2
 				AND d.bowler IN %s
-				AND m.league = $1
+				AND m.league = ANY(string_to_array($1, ','))
 				AND d.innings <= 2
 			GROUP BY d.bowler
 			ORDER BY runs_scored DESC;
@@ -216,7 +214,7 @@ func (s *service) GetMultiMatchup(
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.bowler = $2
 				AND d.striker IN %s
-				AND m.league = $1
+				AND m.league = ANY(string_to_array($1, ','))
 				AND d.innings <= 2
 			GROUP BY d.striker
 			ORDER BY dismissals DESC, economy_rate ASC;
@@ -257,16 +255,11 @@ func (s *service) GetMultiMatchup(
 }
 
 func (s *service) GetRunRateTrend(ctx context.Context, league string, team *string) ([]models.RunRateTrendItem, error) {
-	seasonFloorClause := ""
-	if league == "IPL" {
-		seasonFloorClause = "AND m.season >= '2008'"
-	}
-
 	args := []interface{}{league}
 	teamClause := ""
 	if team != nil && *team != "" {
 		args = append(args, *team)
-		teamClause = fmt.Sprintf("AND %s = $%d", standardizedBattingTeamSQL, len(args))
+		teamClause = fmt.Sprintf("AND %s = $%d", standardizedBattingTeamSQL(), len(args))
 	}
 
 	query := fmt.Sprintf(`
@@ -277,12 +270,11 @@ func (s *service) GetRunRateTrend(ctx context.Context, league string, team *stri
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
 		WHERE d.innings <= 2
-			AND m.league = $1
-			%s
+			AND m.league = ANY(string_to_array($1, ','))
 			%s
 		GROUP BY m.season
 		ORDER BY m.season ASC;
-	`, seasonFloorClause, teamClause)
+	`, teamClause)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -328,7 +320,7 @@ func (s *service) GetTeamRunRateProgression(
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.innings <= 2
-				AND m.league = $1
+				AND m.league = ANY(string_to_array($1, ','))
 				AND m.season = $2
 		)
 		SELECT
@@ -340,7 +332,7 @@ func (s *service) GetTeamRunRateProgression(
 			AND FLOOR(CAST(ball AS DECIMAL(10,2)))::int + 1 BETWEEN 1 AND 20
 		GROUP BY over_number
 		ORDER BY over_number;
-	`, standardizedBattingTeamSQL)
+	`, standardizedBattingTeamSQL())
 
 	rows, err := s.db.QueryContext(ctx, aggregatedQuery, league, season, team)
 	if err != nil {
@@ -379,7 +371,7 @@ func (s *service) GetTeamRunRateProgression(
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.innings <= 2
-				AND m.league = $1
+				AND m.league = ANY(string_to_array($1, ','))
 				AND m.season = $2
 		)
 		SELECT
@@ -388,7 +380,7 @@ func (s *service) GetTeamRunRateProgression(
 			COUNT(*)::int AS total_deliveries
 		FROM standardized_deliveries
 		WHERE team = $3;
-	`, standardizedBattingTeamSQL)
+	`, standardizedBattingTeamSQL())
 
 	metadata := models.TeamRunRateProgressionMetadata{}
 	if err := s.db.QueryRowContext(ctx, metadataQuery, league, season, team).Scan(
@@ -518,9 +510,9 @@ func (s *service) GetStatExplorerOptions(
 		SELECT DISTINCT %s AS team
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
-		WHERE m.league = $1
+		WHERE m.league = ANY(string_to_array($1, ','))
 		ORDER BY team;
-	`, standardizedBattingTeamSQL), league)
+	`, standardizedBattingTeamSQL()), league)
 	if err != nil {
 		return models.StatExplorerFilterOptions{}, err
 	}
@@ -528,7 +520,7 @@ func (s *service) GetStatExplorerOptions(
 	seasons, err := s.queryStringList(ctx, `
 		SELECT DISTINCT season
 		FROM wpl_match
-		WHERE league = $1
+		WHERE league = ANY(string_to_array($1, ','))
 		ORDER BY season DESC;
 	`, league)
 	if err != nil {
@@ -538,7 +530,7 @@ func (s *service) GetStatExplorerOptions(
 	venues, err := s.queryStringList(ctx, `
 		SELECT DISTINCT venue
 		FROM wpl_match
-		WHERE league = $1
+		WHERE league = ANY(string_to_array($1, ','))
 		ORDER BY venue;
 	`, league)
 	if err != nil {
@@ -548,7 +540,7 @@ func (s *service) GetStatExplorerOptions(
 	cities, err := s.queryStringList(ctx, `
 		SELECT DISTINCT city
 		FROM wpl_match_info
-		WHERE league = $1
+		WHERE league = ANY(string_to_array($1, ','))
 		ORDER BY city;
 	`, league)
 	if err != nil {
@@ -558,7 +550,7 @@ func (s *service) GetStatExplorerOptions(
 	tossWinners, err := s.queryStringList(ctx, `
 		SELECT DISTINCT toss_winner
 		FROM wpl_match_info
-		WHERE league = $1
+		WHERE league = ANY(string_to_array($1, ','))
 		ORDER BY toss_winner;
 	`, league)
 	if err != nil {
@@ -649,7 +641,7 @@ func (s *service) getPlayerCompareBatting(
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.striker IN %s
-				AND m.league = $1
+				AND m.league = ANY(string_to_array($1, ','))
 				AND d.innings <= 2
 				%s
 				%s
@@ -664,7 +656,7 @@ func (s *service) getPlayerCompareBatting(
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.player_dismissed IN %s
-				AND m.league = $1
+				AND m.league = ANY(string_to_array($1, ','))
 				AND d.innings <= 2
 				AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out', 'retired out', 'obstructing the field', 'hit the ball twice', 'handled the ball', 'timed out')
 				%s
@@ -813,7 +805,7 @@ func (s *service) getPlayerCompareBowling(
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.bowler IN %s
-				AND m.league = $1
+				AND m.league = ANY(string_to_array($1, ','))
 				AND d.innings <= 2
 				%s
 				%s
@@ -843,7 +835,7 @@ func (s *service) getPlayerCompareBowling(
 		JOIN wpl_match m ON d.match_id = m.match_id
 		LEFT JOIN innings_agg ia ON d.bowler = ia.bowler
 		WHERE d.bowler IN %s
-			AND m.league = $1
+			AND m.league = ANY(string_to_array($1, ','))
 			AND d.innings <= 2
 			%s
 			%s
@@ -902,7 +894,7 @@ func (s *service) GetPlayerProgression(
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
 		WHERE d.striker = $1
-			AND m.league = $2
+			AND m.league = ANY(string_to_array($2, ','))
 			%s
 			AND FLOOR(CAST(d.ball AS DECIMAL(10,2)))::int + 1 BETWEEN 1 AND 20
 		GROUP BY FLOOR(CAST(d.ball AS DECIMAL(10,2)))::int + 1
@@ -972,7 +964,7 @@ func (s *service) GetPlayerProgression(
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
 		WHERE d.striker = $1
-			AND m.league = $2
+			AND m.league = ANY(string_to_array($2, ','))
 			%s;
 	`, inningsClause)
 
@@ -1017,7 +1009,7 @@ func (s *service) GetAdvancedStats(
 			d.ball
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
-		WHERE m.league = $1
+		WHERE m.league = ANY(string_to_array($1, ','))
 			AND d.innings <= 2
 			AND %s = $2;
 	`
@@ -1101,7 +1093,7 @@ func (s *service) GetFallOfWickets(
 				) as teams
 			FROM wpl_match m
 			JOIN wpl_delivery d ON d.match_id = m.match_id
-			WHERE m.match_id = $1 AND m.league = $2
+			WHERE m.match_id = $1 AND m.league = ANY(string_to_array($2, ','))
 			GROUP BY m.match_id, m.league, m.season, m.start_date, m.venue
 		)
 		SELECT match_id, league, season, start_date, venue, teams FROM match_teams;
@@ -1151,7 +1143,7 @@ func (s *service) GetFallOfWickets(
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.player_dismissed IS NOT NULL
 				AND d.match_id = $1
-				AND m.league = $2
+				AND m.league = ANY(string_to_array($2, ','))
 				AND d.innings <= 2
 				AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out', 'retired hurt', 'obstructing the field', 'hit the ball twice', 'handled the ball', 'timed out')
 		),

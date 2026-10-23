@@ -2,13 +2,15 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
 func (s *service) GetLeagueConfigStats(ctx context.Context) ([]models.LeagueConfigItem, error) {
-	query := `
+	query := fmt.Sprintf(`
 		WITH match_stats AS (
 			SELECT
 				league,
@@ -20,13 +22,7 @@ func (s *service) GetLeagueConfigStats(ctx context.Context) ([]models.LeagueConf
 		team_stats AS (
 			SELECT
 				mi.league,
-				COUNT(DISTINCT CASE
-					WHEN t.team_name = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-					WHEN t.team_name = 'Delhi Daredevils' THEN 'Delhi Capitals'
-					WHEN t.team_name = 'Kings XI Punjab' THEN 'Punjab Kings'
-					WHEN t.team_name = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-					ELSE t.team_name
-				END)::int AS teams
+				COUNT(DISTINCT %s)::int AS teams
 			FROM wpl_team t
 			JOIN wpl_match_info mi ON mi.match_id = t.match_id
 			GROUP BY mi.league
@@ -49,7 +45,7 @@ func (s *service) GetLeagueConfigStats(ctx context.Context) ([]models.LeagueConf
 		LEFT JOIN team_stats t ON t.league = m.league
 		LEFT JOIN player_stats p ON p.league = m.league
 		ORDER BY m.league;
-	`
+	`, leagues.Default().TeamNameSQL("t.team_name"))
 
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {

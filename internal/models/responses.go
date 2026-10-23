@@ -133,6 +133,8 @@ type LeagueConfigStats struct {
 
 type LeagueConfigItem struct {
 	League string            `json:"league"`
+	Name   string            `json:"name,omitempty"`
+	Gender string            `json:"gender,omitempty"`
 	Stats  LeagueConfigStats `json:"stats"`
 }
 
