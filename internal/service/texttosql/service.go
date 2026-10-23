@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	aisql "github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
@@ -398,12 +399,7 @@ func normalizeTeamResults(rows []map[string]interface{}) []map[string]interface{
 		return rows
 	}
 
-	canonicalMap := map[string]string{
-		"Royal Challengers Bengaluru": "Royal Challengers Bangalore",
-		"Delhi Daredevils":            "Delhi Capitals",
-		"Kings XI Punjab":             "Punjab Kings",
-		"Rising Pune Supergiants":     "Rising Pune Supergiant",
-	}
+	canonicalMap := leagues.Default().TeamRenames()
 
 	aggregated := map[string]map[string]interface{}{}
 	order := []string{}

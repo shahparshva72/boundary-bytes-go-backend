@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
@@ -25,7 +26,7 @@ func (s *service) GetBattersByLeague(ctx context.Context, league string) ([]stri
 		SELECT DISTINCT d.striker
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
-		WHERE m.league = $1 AND d.innings <= 2
+		WHERE m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
 		ORDER BY d.striker;
 	`
 
@@ -56,7 +57,7 @@ func (s *service) GetBowlersByLeague(ctx context.Context, league string) ([]stri
 		SELECT DISTINCT d.bowler
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
-		WHERE m.league = $1 AND d.innings <= 2
+		WHERE m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
 		ORDER BY d.bowler;
 	`
 
@@ -187,23 +188,28 @@ func (s *service) GetPlayerStyleByName(ctx context.Context, playerName string) (
 	return &bio, nil
 }
 
+// GetAllLeagues returns the visible leagues that have matches loaded.
 func (s *service) GetAllLeagues(ctx context.Context) ([]string, error) {
-	query := `SELECT DISTINCT league FROM wpl_match ORDER BY league;`
-	rows, err := s.db.QueryContext(ctx, query)
+	query := `
+		SELECT DISTINCT league FROM wpl_match
+		WHERE league = ANY(string_to_array($1, ','))
+		ORDER BY league;
+	`
+	rows, err := s.db.QueryContext(ctx, query, strings.Join(leagues.Default().VisibleCodes(""), ","))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var leagues []string
+	var codes []string
 	for rows.Next() {
 		var league string
 		if err := rows.Scan(&league); err != nil {
 			return nil, err
 		}
-		leagues = append(leagues, league)
+		codes = append(codes, league)
 	}
-	return leagues, nil
+	return codes, nil
 }
 
 func (s *service) GetMatchupStats(ctx context.Context, league, batter, bowler string) (*models.MatchupData, error) {
@@ -223,7 +229,7 @@ func (s *service) GetMatchupStats(ctx context.Context, league, batter, bowler st
 			END as "average"
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
-		WHERE d.striker = $2 AND d.bowler = $3 AND m.league = $1 AND d.innings <= 2
+		WHERE d.striker = $2 AND d.bowler = $3 AND m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
 	`
 
 	var stats models.MatchupData
@@ -265,7 +271,7 @@ func (s *service) GetLeadingWicketTakers(ctx context.Context, league string, pag
 				COUNT(*) OVER() as total_count
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
-			WHERE m.league = $1 AND d.innings <= 2
+			WHERE m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
 			GROUP BY d.bowler
 			HAVING COUNT(*) FILTER (
 				WHERE d.player_dismissed IS NOT NULL
@@ -345,7 +351,7 @@ func (s *service) GetLeadingRunScorers(ctx context.Context, league string, page,
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			%s
-			WHERE m.league = $1 AND d.innings <= 2
+			WHERE m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
 				%s
 		),
 		aggregated AS (

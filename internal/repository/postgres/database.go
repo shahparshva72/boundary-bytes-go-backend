@@ -10,6 +10,11 @@ import (
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
+// Service is the data access layer. Every `league` parameter is a league
+// scope: one or more comma-separated league codes ("IPL" or "IPL,PSL,BBL"),
+// already validated by the handler. Queries filter it with
+// m.league = ANY(string_to_array($n, ',')), so a single code behaves exactly
+// like the old m.league = $n.
 type Service interface {
 	Health() map[string]string
 	Close() error

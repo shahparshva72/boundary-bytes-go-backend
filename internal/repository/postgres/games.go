@@ -19,7 +19,7 @@ const batterBowlersH2HQuery = `
 		END AS strike_rate
 	FROM wpl_delivery d
 	JOIN wpl_match m ON d.match_id = m.match_id
-	WHERE m.league = $1
+	WHERE m.league = ANY(string_to_array($1, ','))
 		AND d.striker = $2
 		AND d.innings <= 2
 	GROUP BY d.bowler
@@ -36,7 +36,7 @@ func (s *service) GetEligibleMatchupBatters(ctx context.Context, league, seed st
 				d.bowler AS bowler
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
-			WHERE m.league = $1 AND d.innings <= 2
+			WHERE m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
 			GROUP BY d.striker, d.bowler
 			HAVING COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0) >= 3
 		)

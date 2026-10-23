@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
 )
 
@@ -454,7 +455,7 @@ func buildBattingBowlingQueries(
 			WHERE %s
 				%s
 			GROUP BY d.match_id, d.innings, d.bowler%s
-		)`, standardizedBattingTeamSQL, primarySelectSQL, opponentSelectSQL, primaryJoinSQL, opponentJoinSQL, whereClause, playerStyleFilterSQL, opponentGroupBySQL)
+		)`, standardizedBattingTeamSQL(), primarySelectSQL, opponentSelectSQL, primaryJoinSQL, opponentJoinSQL, whereClause, playerStyleFilterSQL, opponentGroupBySQL)
 	} else {
 		statsCTE = fmt.Sprintf(`stats AS (
 			SELECT
@@ -486,7 +487,7 @@ func buildBattingBowlingQueries(
 				%s
 				%s
 			GROUP BY d.match_id, d.innings, d.striker%s
-		)`, standardizedBattingTeamSQL, primarySelectSQL, opponentSelectSQL, battingPositionSelectSQL, primaryJoinSQL, opponentJoinSQL, battingPositionJoinSQL, whereClause, playerStyleFilterSQL, battingPositionFilterSQL, opponentGroupBySQL)
+		)`, standardizedBattingTeamSQL(), primarySelectSQL, opponentSelectSQL, battingPositionSelectSQL, primaryJoinSQL, opponentJoinSQL, battingPositionJoinSQL, whereClause, playerStyleFilterSQL, battingPositionFilterSQL, opponentGroupBySQL)
 	}
 
 	ctes := []string{}
@@ -524,7 +525,7 @@ func buildTeamReportQueries(
 	request models.StatExplorerRunRequest,
 	league string,
 ) (statExplorerBuiltQuery, error) {
-	conditions := []string{fmt.Sprintf("m.league = %s", builder.addArg(league))}
+	conditions := []string{fmt.Sprintf("m.league = ANY(string_to_array(%s, ','))", builder.addArg(league))}
 	if len(request.Filters.Seasons) > 0 {
 		conditions = append(conditions, fmt.Sprintf("m.season IN %s", builder.stringInClause(request.Filters.Seasons)))
 	}
@@ -632,7 +633,7 @@ func buildTeamReportQueries(
 		%s
 		%s
 		LIMIT %d OFFSET %d
-	`, standardizedBattingTeamSQL, whereClause, strings.Join(selectCols, ",\n"), groupByClause, orderBy, request.Pagination.PageSize, offset)
+	`, standardizedBattingTeamSQL(), whereClause, strings.Join(selectCols, ",\n"), groupByClause, orderBy, request.Pagination.PageSize, offset)
 
 	groupedSubquery := "SELECT 1 FROM teams t LEFT JOIN winners w ON t.match_id = w.match_id"
 	if len(groupByCols) > 0 {
@@ -676,7 +677,7 @@ func buildTeamReportQueries(
 		)
 		SELECT COUNT(*)::int AS total
 		FROM (%s) grouped
-	`, whereClause, standardizedBattingTeamSQL, standardizedBattingTeamSQL, groupedSubquery)
+	`, whereClause, standardizedBattingTeamSQL(), standardizedBattingTeamSQL(), groupedSubquery)
 
 	return statExplorerBuiltQuery{sql: sql, countSQL: countSQL, args: builder.args, metricKeys: metricKeys}, nil
 }
@@ -686,7 +687,7 @@ func buildMatchReportQueries(
 	request models.StatExplorerRunRequest,
 	league string,
 ) (statExplorerBuiltQuery, error) {
-	conditions := []string{fmt.Sprintf("m.league = %s", builder.addArg(league))}
+	conditions := []string{fmt.Sprintf("m.league = ANY(string_to_array(%s, ','))", builder.addArg(league))}
 	if len(request.Filters.Teams) > 0 {
 		inClause := builder.stringInClause(request.Filters.Teams)
 		conditions = append(conditions, fmt.Sprintf("(d.batting_team IN %s OR d.bowling_team IN %s)", inClause, inClause))
@@ -719,9 +720,9 @@ func buildMatchReportQueries(
 	if request.Filters.ResultFilter != nil {
 		switch *request.Filters.ResultFilter {
 		case "won":
-			conditions = append(conditions, fmt.Sprintf("mi.winner IS NOT NULL AND mi.winner = %s", standardizedBattingTeamSQL))
+			conditions = append(conditions, fmt.Sprintf("mi.winner IS NOT NULL AND mi.winner = %s", standardizedBattingTeamSQL()))
 		case "lost":
-			conditions = append(conditions, fmt.Sprintf("mi.winner IS NOT NULL AND mi.winner != %s", standardizedBattingTeamSQL))
+			conditions = append(conditions, fmt.Sprintf("mi.winner IS NOT NULL AND mi.winner != %s", standardizedBattingTeamSQL()))
 		case "noresult":
 			conditions = append(conditions, "mi.winner IS NULL")
 		}
@@ -830,20 +831,20 @@ func buildStatExplorerWhereClause(
 	filters models.StatExplorerRunFilters,
 	league string,
 ) string {
-	conditions := []string{fmt.Sprintf("m.league = %s", builder.addArg(league)), "d.innings <= 2"}
+	conditions := []string{fmt.Sprintf("m.league = ANY(string_to_array(%s, ','))", builder.addArg(league)), "d.innings <= 2"}
 
 	if len(filters.Teams) > 0 {
 		stdTeams := standardizeTeams(filters.Teams)
 		if reportType == "bowling" {
 			conditions = append(conditions, fmt.Sprintf("d.bowling_team IN %s", builder.stringInClause(stdTeams)))
 		} else {
-			conditions = append(conditions, fmt.Sprintf("%s IN %s", standardizedBattingTeamSQL, builder.stringInClause(stdTeams)))
+			conditions = append(conditions, fmt.Sprintf("%s IN %s", standardizedBattingTeamSQL(), builder.stringInClause(stdTeams)))
 		}
 	}
 	if len(filters.Opposition) > 0 {
 		stdOpposition := standardizeTeams(filters.Opposition)
 		if reportType == "bowling" {
-			conditions = append(conditions, fmt.Sprintf("%s IN %s", standardizedBattingTeamSQL, builder.stringInClause(stdOpposition)))
+			conditions = append(conditions, fmt.Sprintf("%s IN %s", standardizedBattingTeamSQL(), builder.stringInClause(stdOpposition)))
 		} else {
 			conditions = append(conditions, fmt.Sprintf("d.bowling_team IN %s", builder.stringInClause(stdOpposition)))
 		}
@@ -886,7 +887,7 @@ func buildStatExplorerWhereClause(
 		}
 	}
 	if filters.ResultFilter != nil {
-		teamSQL := standardizedBattingTeamSQL
+		teamSQL := standardizedBattingTeamSQL()
 		if reportType == "bowling" {
 			teamSQL = "d.bowling_team"
 		}
@@ -1024,18 +1025,10 @@ func standardizeTeams(teams []string) []string {
 }
 
 func standardizeTeamName(team string) string {
-	switch team {
-	case "Royal Challengers Bengaluru":
-		return "Royal Challengers Bangalore"
-	case "Delhi Daredevils":
-		return "Delhi Capitals"
-	case "Kings XI Punjab":
-		return "Punjab Kings"
-	case "Rising Pune Supergiants":
-		return "Rising Pune Supergiant"
-	default:
-		return team
+	if merged, ok := leagues.Default().TeamRenames()[team]; ok {
+		return merged
 	}
+	return team
 }
 
 func containsString(values []string, target string) bool {

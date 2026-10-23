@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ratelimit"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/repository/postgres"
 	advancedstatsservice "github.com/shahparshva72/boundary-bytes-go-backend/internal/service/advancedstats"
@@ -40,7 +41,7 @@ func New(deps Dependencies) *Server {
 	advancedStatsService := advancedstatsservice.New(deps.DB)
 	aiFeedbackService := aifeedbackservice.New(deps.DB)
 	healthService := healthservice.New(deps.DB)
-	leaguesService := leaguesservice.New(deps.DB)
+	leaguesService := leaguesservice.New(deps.DB, leagues.Default())
 	matchesService := matchesservice.New(deps.DB)
 	statsService := statsservice.New(deps.DB)
 	playersService := playersservice.New(deps.DB, statsService)
