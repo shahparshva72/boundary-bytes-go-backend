@@ -27,6 +27,8 @@ type Dependencies struct {
 	SQLGenerator ai.SQLGenerator
 	Classifier   texttosql.QueryClassifier
 	RateLimiter  *ratelimit.DailyLimiter
+	// ResponseCache, when set, caches read-only stats responses.
+	ResponseCache func(http.Handler) http.Handler
 }
 
 type Server struct {
@@ -56,6 +58,9 @@ func New(deps Dependencies) *Server {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
+	if deps.ResponseCache != nil {
+		r.Use(deps.ResponseCache)
+	}
 
 	r.NotFound(handlers.NotFoundHandler)
 
