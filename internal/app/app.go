@@ -4,13 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/config"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ratelimit"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/repository/postgres"
 	httpserver "github.com/shahparshva72/boundary-bytes-go-backend/internal/transport/http"
 )
+
+// chatContextRefresh is how often the chat re-reads season labels.
+const chatContextRefresh = time.Hour
 
 type App struct {
 	config *config.Config
@@ -28,11 +33,15 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
+	// The chat prompt and fast-path templates need the visible leagues and the
+	// loaded season labels; re-read hourly so new seasons appear.
+	chatContext := ai.NewChatContext(db.GetDB(), leagues.Default(), chatContextRefresh)
+
 	sqlGenerator := ai.NewGeminiSQLService(ai.GeminiSQLConfig{
 		APIKey:  cfg.AI.GoogleAPIKey,
 		Model:   cfg.AI.GeminiModel,
 		Timeout: cfg.AI.Timeout,
-	})
+	}).WithPrompt(chatContext.Prompt)
 
 	var dailyLimiter *ratelimit.DailyLimiter
 	if cfg.RateLimit.Enabled() {
@@ -69,6 +78,7 @@ func New() (*App, error) {
 		SQLGenerator: sqlGenerator,
 		Classifier:   jevClassifier,
 		RateLimiter:  dailyLimiter,
+		ChatContext:  chatContext,
 	})
 
 	return &App{

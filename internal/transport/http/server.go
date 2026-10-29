@@ -27,6 +27,8 @@ type Dependencies struct {
 	SQLGenerator ai.SQLGenerator
 	Classifier   texttosql.QueryClassifier
 	RateLimiter  *ratelimit.DailyLimiter
+	// ChatContext supplies leagues and seasons to text-to-SQL.
+	ChatContext *ai.ChatContext
 }
 
 type Server struct {
@@ -49,6 +51,9 @@ func New(deps Dependencies) *Server {
 	textToSQLService := texttosql.New(deps.DB, deps.SQLGenerator)
 	if deps.Classifier != nil {
 		textToSQLService.WithClassifier(deps.Classifier)
+	}
+	if deps.ChatContext != nil {
+		textToSQLService.WithChatContext(deps.ChatContext)
 	}
 
 	r.Use(middleware.RequestID)

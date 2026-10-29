@@ -50,6 +50,7 @@ type Service struct {
 	repository     Repository
 	generator      SQLGenerator
 	classifier     QueryClassifier
+	chat           *aisql.ChatContext
 	lookupTimeout  time.Duration
 	executeTimeout time.Duration
 
@@ -105,6 +106,19 @@ func (s *Service) WithClassifier(classifier QueryClassifier) *Service {
 	return s
 }
 
+// WithChatContext supplies the loaded seasons used to read "<league> <year>".
+func (s *Service) WithChatContext(chat *aisql.ChatContext) *Service {
+	s.chat = chat
+	return s
+}
+
+func (s *Service) seasons(ctx context.Context) aisql.SeasonIndex {
+	if s.chat == nil {
+		return nil
+	}
+	return s.chat.Seasons(ctx)
+}
+
 func (s *Service) Answer(ctx context.Context, question string) (*Result, error) {
 	start := time.Now()
 
@@ -150,7 +164,7 @@ func (s *Service) Answer(ctx context.Context, question string) (*Result, error) 
 
 			// Dynamic Routing: Fast-path via Jev when a known archetype is identified with good confidence (>= 0.75)
 			if classification.Confidence >= 0.75 {
-				if fastQueries := buildFastPathQueries(classification.Intent, classification.League, classification.Phase, sanitizedQuestion); len(fastQueries) > 0 {
+				if fastQueries := buildFastPathQueries(classification.Intent, classification.League, classification.Phase, sanitizedQuestion, s.seasons(ctx)); len(fastQueries) > 0 {
 					rawGeneratedQueries = fastQueries
 					routedBy = "jev"
 					log.Printf("[Router] Dynamically routed to fast template (%d queries) for intent=%s league=%s", len(fastQueries), classification.Intent, classification.League)
@@ -505,6 +519,14 @@ var (
 		"batting": true, "bowling": true, "performance": true, "profile": true, "figures": true,
 		"numbers": true, "show": true, "me": true, "give": true, "tell": true, "about": true,
 		"does": true, "did": true, "get": true,
+		// Pronouns, filler and league words: anything left over is read as a
+		// player's name ("his career" once resolved to "Abhishek").
+		"his": true, "her": true, "their": true, "he": true, "she": true, "they": true,
+		"entire": true, "whole": true, "ever": true, "so": true, "far": true, "since": true,
+		"across": true, "league": true, "leagues": true, "t": true, "franchise": true, "domestic": true,
+		"women": true, "womens": true, "men": true, "mens": true, "s": true, "competition": true,
+		"history": true, "hit": true, "hits": true, "made": true, "have": true, "had": true,
+		"with": true, "from": true, "a": true, "an": true, "on": true, "this": true, "year": true,
 	}
 )
 
@@ -551,44 +573,97 @@ func extractHeadToHeadPlayers(question string) (string, string) {
 	return "", ""
 }
 
+// phaseExpression classifies a delivery's phase for both T20 overs and The
+// Hundred's 5-ball sets (powerplay = 6 overs or 5 sets, death = last 5); it
+// needs wpl_match_info joined as mi.
+const phaseExpression = `(CASE WHEN CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) < (CASE WHEN COALESCE(mi.balls_per_over, 6) = 5 THEN 5 ELSE 6 END) THEN 'powerplay' WHEN CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) >= 15 THEN 'death' ELSE 'middle' END)`
+
 func buildPhaseFilter(phase string) string {
-	switch strings.ToLower(strings.TrimSpace(phase)) {
-	case "powerplay":
-		return "CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) BETWEEN 0 AND 5"
-	case "middle":
-		return "CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) BETWEEN 6 AND 14"
-	case "death":
-		return "CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) BETWEEN 15 AND 19"
+	switch p := strings.ToLower(strings.TrimSpace(phase)); p {
+	case "powerplay", "middle", "death":
+		return fmt.Sprintf("%s = '%s'", phaseExpression, p)
 	default:
 		return ""
 	}
 }
 
-func buildFastPathQueries(intent, league, phase, question string) []string {
-	var leagueFilter string
+// legalBallsSQL counts legal deliveries: wides and no-balls are re-bowled.
+const legalBallsSQL = "COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)"
+
+var explicitSeasonPattern = regexp.MustCompile(`\b(20\d\d)\s*[-/]\s*(\d\d)\b`)
+
+// buildDateFilter turns a year in the question into a match filter:
+// "2023-24" is that season label; "<league> 2024" is the season mostly
+// played in 2024 when the league's seasons span two years; any other year is
+// the calendar year.
+func buildDateFilter(question string, leagueCodes []string, seasons aisql.SeasonIndex) string {
+	if m := explicitSeasonPattern.FindStringSubmatch(question); m != nil {
+		return fmt.Sprintf("m.season = '%s/%s'", m[1], m[2])
+	}
+	match := yearPattern.FindString(question)
+	if match == "" {
+		return ""
+	}
+	if len(leagueCodes) == 1 {
+		year, _ := strconv.Atoi(match)
+		if label, ok := seasons.LabelFor(leagueCodes[0], year); ok {
+			return fmt.Sprintf("m.season = '%s'", label)
+		}
+	}
+	return fmt.Sprintf("m.start_date >= '%s-01-01' AND m.start_date <= '%s-12-31'", match, match)
+}
+
+// playerLookupSQL resolves a surname to the stored player name, preferring
+// the given initial and then the player with the most appearances (in the
+// question's leagues, when it names any).
+func playerLookupSQL(surname, initial, leagueFilter string) string {
+	where := fmt.Sprintf("player_name ILIKE '%%%s%%'", surname)
+	if leagueFilter != "" {
+		where += " AND " + leagueFilter
+	}
+	// Must start "SELECT player_name FROM wpl_player": that is how the
+	// executor recognises a lookup (aisql.HasPlayerNameResolution).
+	return fmt.Sprintf(`SELECT player_name FROM wpl_player p JOIN wpl_match m ON m.match_id = p.match_id WHERE %s GROUP BY player_name ORDER BY CASE WHEN player_name ILIKE '%s%%%s' THEN 1 ELSE 2 END, COUNT(*) DESC LIMIT 1`, where, initial, surname)
+}
+
+// buildFastPathQueries returns template SQL for a classified question, or nil
+// to let Gemini write it. Leagues come from the names in the question (for
+// team questions, from the classifier when none is named); with none, a
+// question about a specific player covers all leagues and anything else
+// covers the men's (or, if asked, women's) leagues.
+func buildFastPathQueries(intent, classifiedLeague, phase, question string, seasons aisql.SeasonIndex) []string {
+	registry := leagues.Default()
 	lowerQ := strings.ToLower(question)
-	normalizedLeague := strings.ToUpper(strings.TrimSpace(league))
-	switch {
-	case strings.Contains(lowerQ, "wpl") || normalizedLeague == "WPL":
-		leagueFilter = "m.league = 'WPL'"
-	case strings.Contains(lowerQ, "wbbl") || normalizedLeague == "WBBL":
-		leagueFilter = "m.league = 'WBBL'"
-	case strings.Contains(lowerQ, "bbl") || normalizedLeague == "BBL":
-		leagueFilter = "m.league = 'BBL'"
-	case strings.Contains(lowerQ, "sa20") || normalizedLeague == "SA20":
-		leagueFilter = "m.league = 'SA20'"
-	case strings.Contains(lowerQ, "ipl") || normalizedLeague == "IPL":
-		leagueFilter = "m.league = 'IPL'"
-	default:
-		leagueFilter = "m.league = 'IPL'"
+
+	leagueCodes := aisql.DetectLeagues(registry, question)
+	// A team question rarely names its league ("Perth Scorchers wins"); the
+	// classifier infers it from the team. Player questions don't use this: a
+	// player who appears in several leagues would be wrongly narrowed.
+	isTeamQuestion := intent == "team_record" || intent == "team_wins"
+	if len(leagueCodes) == 0 && isTeamQuestion && registry.IsVisible(classifiedLeague) {
+		leagueCodes = []string{classifiedLeague}
+	}
+	aboutNamedPlayer := intent == "player_batting_stat" || intent == "player_bowling_stat" || intent == "head_to_head"
+	if len(leagueCodes) == 0 && !aboutNamedPlayer {
+		leagueCodes = aisql.DefaultLeagues(registry, question)
+	}
+	leagueFilter := ""
+	if len(leagueCodes) > 0 {
+		leagueFilter = aisql.LeagueFilterSQL(leagueCodes)
+	}
+	// Only a league the question named narrows the player lookup.
+	lookupLeagueFilter := ""
+	if named := aisql.DetectLeagues(registry, question); len(named) > 0 {
+		lookupLeagueFilter = aisql.LeagueFilterSQL(named)
 	}
 
-	var dateFilter string
-	if match := yearPattern.FindString(question); match != "" {
-		dateFilter = fmt.Sprintf("m.start_date >= '%s-01-01' AND m.start_date <= '%s-12-31'", match, match)
-	}
-
+	dateFilter := buildDateFilter(question, leagueCodes, seasons)
 	phaseFilter := buildPhaseFilter(phase)
+
+	deliveriesFrom := "FROM wpl_delivery d JOIN wpl_match m ON m.match_id = d.match_id"
+	if phaseFilter != "" {
+		deliveriesFrom += " LEFT JOIN wpl_match_info mi ON mi.match_id = d.match_id"
+	}
 
 	baseWhere := func(extra ...string) string {
 		parts := []string{"d.innings <= 2"}
@@ -609,17 +684,18 @@ func buildFastPathQueries(intent, league, phase, question string) []string {
 		return strings.Join(parts, " AND ")
 	}
 
-	fullName, surname := extractPlayerName(question)
-	h2hBatter, h2hBowler := extractHeadToHeadPlayers(question)
+	nameText := aisql.StripLeagueNames(registry, question)
+	fullName, surname := extractPlayerName(nameText)
+	h2hBatter, h2hBowler := extractHeadToHeadPlayers(nameText)
 
 	if intent == "head_to_head" || (h2hBatter != "" && h2hBowler != "") {
 		if h2hBatter == "" || h2hBowler == "" {
 			return nil
 		}
-		q1 := fmt.Sprintf(`SELECT player_name FROM wpl_player WHERE player_name ILIKE '%%%s%%' ORDER BY CASE WHEN player_name ILIKE '%s%%' THEN 1 ELSE 2 END LIMIT 1`, h2hBatter, h2hBatter)
-		q2 := fmt.Sprintf(`SELECT player_name FROM wpl_player WHERE player_name ILIKE '%%%s%%' ORDER BY CASE WHEN player_name ILIKE '%s%%' THEN 1 ELSE 2 END LIMIT 1`, h2hBowler, h2hBowler)
+		q1 := playerLookupSQL(h2hBatter, "", lookupLeagueFilter)
+		q2 := playerLookupSQL(h2hBowler, "", lookupLeagueFilter)
 		whereClause := baseWhere("d.striker = 'RESOLVED_BATTER_NAME'", "d.bowler = 'RESOLVED_BOWLER_NAME'")
-		main := fmt.Sprintf(`SELECT SUM(d.runs_off_bat) AS runs, COUNT(*) FILTER (WHERE d.wides = 0) AS balls, ROUND(((SUM(d.runs_off_bat)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0)), 2) AS strike_rate, COUNT(CASE WHEN d.player_dismissed = d.striker THEN 1 END) AS dismissals FROM wpl_delivery d JOIN wpl_match m ON m.match_id = d.match_id WHERE %s`, whereClause)
+		main := fmt.Sprintf(`SELECT SUM(d.runs_off_bat) AS runs, COUNT(*) FILTER (WHERE d.wides = 0) AS balls, ROUND(((SUM(d.runs_off_bat)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0)), 2) AS strike_rate, COUNT(CASE WHEN d.player_dismissed = d.striker THEN 1 END) AS dismissals %s WHERE %s`, deliveriesFrom, whereClause)
 		return []string{q1, q2, main}
 	}
 
@@ -632,9 +708,9 @@ func buildFastPathQueries(intent, league, phase, question string) []string {
 		if len(fullName) > 0 {
 			initial = string(fullName[0])
 		}
-		lookup := fmt.Sprintf(`SELECT player_name FROM wpl_player WHERE player_name ILIKE '%%%s%%' ORDER BY CASE WHEN player_name ILIKE '%s%%%s' THEN 1 ELSE 2 END LIMIT 1`, surname, initial, surname)
+		lookup := playerLookupSQL(surname, initial, lookupLeagueFilter)
 		whereClause := baseWhere("d.striker = 'RESOLVED_PLAYER_NAME'")
-		main := fmt.Sprintf(`SELECT d.striker, SUM(d.runs_off_bat) AS runs, COUNT(*) FILTER (WHERE d.wides = 0) AS balls, ROUND(((SUM(d.runs_off_bat)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0)), 2) AS strike_rate, COUNT(*) FILTER (WHERE d.runs_off_bat = 4) AS fours, COUNT(*) FILTER (WHERE d.runs_off_bat = 6) AS sixes FROM wpl_delivery d JOIN wpl_match m ON m.match_id = d.match_id WHERE %s GROUP BY d.striker`, whereClause)
+		main := fmt.Sprintf(`SELECT d.striker, SUM(d.runs_off_bat) AS runs, COUNT(*) FILTER (WHERE d.wides = 0) AS balls, ROUND(((SUM(d.runs_off_bat)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0)), 2) AS strike_rate, COUNT(*) FILTER (WHERE d.runs_off_bat = 4) AS fours, COUNT(*) FILTER (WHERE d.runs_off_bat = 6) AS sixes %s WHERE %s GROUP BY d.striker`, deliveriesFrom, whereClause)
 		return []string{lookup, main}
 
 	case "player_bowling_stat":
@@ -645,9 +721,9 @@ func buildFastPathQueries(intent, league, phase, question string) []string {
 		if len(fullName) > 0 {
 			initial = string(fullName[0])
 		}
-		lookup := fmt.Sprintf(`SELECT player_name FROM wpl_player WHERE player_name ILIKE '%%%s%%' ORDER BY CASE WHEN player_name ILIKE '%s%%%s' THEN 1 ELSE 2 END LIMIT 1`, surname, initial, surname)
+		lookup := playerLookupSQL(surname, initial, lookupLeagueFilter)
 		whereClause := baseWhere("d.bowler = 'RESOLVED_PLAYER_NAME'")
-		main := fmt.Sprintf(`SELECT d.bowler, COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')) AS wickets, SUM(d.runs_off_bat + d.wides + d.noballs) AS runs_conceded, ROUND(SUM(d.runs_off_bat + d.wides + d.noballs) / NULLIF(COUNT(*)::DECIMAL / 6, 0), 2) AS economy_rate FROM wpl_delivery d JOIN wpl_match m ON m.match_id = d.match_id WHERE %s GROUP BY d.bowler`, whereClause)
+		main := fmt.Sprintf(`SELECT d.bowler, COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')) AS wickets, SUM(d.runs_off_bat + d.wides + d.noballs) AS runs_conceded, ROUND(SUM(d.runs_off_bat + d.wides + d.noballs) / NULLIF(`+legalBallsSQL+`::DECIMAL / 6, 0), 2) AS economy_rate %s WHERE %s GROUP BY d.bowler`, deliveriesFrom, whereClause)
 		return []string{lookup, main}
 
 	case "most_sixes":
@@ -656,7 +732,7 @@ func buildFastPathQueries(intent, league, phase, question string) []string {
 		}
 		limit := extractLimit(question, 10)
 		whereClause := baseWhere()
-		return []string{fmt.Sprintf(`SELECT d.striker, COUNT(*) FILTER (WHERE d.runs_off_bat = 6) AS sixes, SUM(d.runs_off_bat) AS runs, ROUND(((SUM(d.runs_off_bat)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0)), 2) AS strike_rate FROM wpl_delivery d JOIN wpl_match m ON m.match_id = d.match_id WHERE %s GROUP BY d.striker ORDER BY sixes DESC LIMIT %d`, whereClause, limit)}
+		return []string{fmt.Sprintf(`SELECT d.striker, COUNT(*) FILTER (WHERE d.runs_off_bat = 6) AS sixes, SUM(d.runs_off_bat) AS runs, ROUND(((SUM(d.runs_off_bat)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0)), 2) AS strike_rate %s WHERE %s GROUP BY d.striker ORDER BY sixes DESC LIMIT %d`, deliveriesFrom, whereClause, limit)}
 
 	case "team_record", "team_wins":
 		limit := extractLimit(question, 10)
@@ -672,12 +748,12 @@ func buildFastPathQueries(intent, league, phase, question string) []string {
 	case "leading_wicket_takers":
 		limit := extractLimit(question, 10)
 		whereClause := baseWhere()
-		return []string{fmt.Sprintf(`SELECT d.bowler, COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')) AS wickets, ROUND(SUM(d.runs_off_bat + d.wides + d.noballs) / NULLIF(COUNT(*)::DECIMAL / 6, 0), 2) AS economy_rate FROM wpl_delivery d JOIN wpl_match m ON m.match_id = d.match_id WHERE %s GROUP BY d.bowler ORDER BY wickets DESC LIMIT %d`, whereClause, limit)}
+		return []string{fmt.Sprintf(`SELECT d.bowler, COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')) AS wickets, ROUND(SUM(d.runs_off_bat + d.wides + d.noballs) / NULLIF(`+legalBallsSQL+`::DECIMAL / 6, 0), 2) AS economy_rate %s WHERE %s GROUP BY d.bowler ORDER BY wickets DESC LIMIT %d`, deliveriesFrom, whereClause, limit)}
 
 	case "leading_run_scorers":
 		limit := extractLimit(question, 10)
 		whereClause := baseWhere()
-		return []string{fmt.Sprintf(`SELECT d.striker, SUM(d.runs_off_bat) AS runs, COUNT(*) FILTER (WHERE d.wides = 0) AS balls, ROUND(((SUM(d.runs_off_bat)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0)), 2) AS strike_rate FROM wpl_delivery d JOIN wpl_match m ON m.match_id = d.match_id WHERE %s GROUP BY d.striker ORDER BY runs DESC LIMIT %d`, whereClause, limit)}
+		return []string{fmt.Sprintf(`SELECT d.striker, SUM(d.runs_off_bat) AS runs, COUNT(*) FILTER (WHERE d.wides = 0) AS balls, ROUND(((SUM(d.runs_off_bat)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0)), 2) AS strike_rate %s WHERE %s GROUP BY d.striker ORDER BY runs DESC LIMIT %d`, deliveriesFrom, whereClause, limit)}
 
 	default:
 		return nil

@@ -57,7 +57,7 @@ func formatAIServerError() apiErrorResponse {
 		Error:   "An unexpected error occurred while processing your cricket question. Please try again.",
 		Code:    "DATABASE_ERROR",
 		Suggestions: []string{
-			"Who are the top run scorers in WPL?",
+			"Who are the top run scorers in the IPL?",
 		},
 		Tips: []string{
 			"Please try again in a moment",
@@ -81,7 +81,7 @@ func formatAITimeoutError(originalQuestion string) apiErrorResponse {
 		Success:     false,
 		Error:       "Your cricket question took too long to process. Please try a simpler question.",
 		Code:        "DATABASE_ERROR",
-		Suggestions: []string{"Top 5 run scorers in WPL 2023"},
+		Suggestions: []string{"Top 5 run scorers in PSL 2024"},
 		Tips:        tips,
 	}
 }
@@ -130,29 +130,29 @@ func generateAISuggestions(code, errorMessage, context string) ([]string, []stri
 			"Keep your question under 500 characters",
 			"Try asking about cricket statistics like top run scorers or bowling figures",
 		)
-		suggestions = append(suggestions, "Top run scorers in WPL 2023", "Best bowling figures in WPL 2023")
+		suggestions = append(suggestions, "Top run scorers in the IPL 2024", "Most wickets in the Women's Big Bash")
 	case "AI_ERROR":
 		tips = append(tips,
 			"Try rephrasing your cricket question more clearly",
 			"Ask about specific players, teams, or statistics",
-			"Be specific about the season or tournament such as WPL 2023 or IPL 2024",
+			"Name a league and season such as IPL 2024, BBL 2023-24 or The Hundred 2025, or leave the league out to search every league",
 		)
-		suggestions = append(suggestions, "Who scored the most runs in WPL 2023?")
+		suggestions = append(suggestions, "Who scored the most runs in the CPL 2024?")
 	case "SQL_ERROR":
 		if strings.Contains(strings.ToLower(errorMessage), "player name") {
 			tips = append(tips,
 				"Try using just the last name such as Mandhana instead of Smriti Mandhana",
 				"Check the spelling of player names",
-				"Make sure the player exists in the WPL database",
+				"Check the spelling of the player's surname",
 			)
-			suggestions = append(suggestions, "Smriti Mandhana's average in WPL 2023")
+			suggestions = append(suggestions, "Babar Azam runs in the PSL")
 		} else {
 			tips = append(tips,
 				"Your question might be too complex, try breaking it into simpler parts",
 				"Ask about one statistic at a time",
 				"Make sure you are asking about cricket data that exists in the database",
 			)
-			suggestions = append(suggestions, "Top 5 strike rates in WPL 2023")
+			suggestions = append(suggestions, "Highest strike rates in the T20 Blast with at least 500 balls")
 		}
 	case "DATABASE_ERROR":
 		lower := strings.ToLower(errorMessage)
@@ -160,10 +160,10 @@ func generateAISuggestions(code, errorMessage, context string) ([]string, []stri
 			tips = append(tips,
 				"Check if the player name or team name is spelled correctly",
 				"Try using partial names such as Kohli instead of Virat Kohli",
-				"Ask about WPL players and teams specifically",
+				"Ask about players and teams from the T20 leagues we cover",
 				"Try different seasons or tournaments that might have the data you are looking for",
 			)
-			suggestions = append(suggestions, "Team with most wins in WPL 2023")
+			suggestions = append(suggestions, "Which team has won the most matches in the SA20?")
 		} else if strings.Contains(lower, "connection") || strings.Contains(lower, "timeout") {
 			tips = append(tips,
 				"There seems to be a temporary connection issue",
@@ -176,7 +176,7 @@ func generateAISuggestions(code, errorMessage, context string) ([]string, []stri
 				"If the problem persists, try asking a simpler cricket question",
 				"Make sure your question is about cricket statistics present in the database",
 			)
-			suggestions = append(suggestions, "Best bowling economy in WPL 2023")
+			suggestions = append(suggestions, "Best economy in the death overs in the IPL")
 		}
 	case "RATE_LIMIT_ERROR":
 		tips = append(tips,
@@ -188,18 +188,18 @@ func generateAISuggestions(code, errorMessage, context string) ([]string, []stri
 
 	contextLower := strings.ToLower(context)
 	if strings.Contains(contextLower, "player") && !strings.Contains(contextLower, "wpl") {
-		tips = append(tips, "Make sure to ask about WPL players specifically")
+		tips = append(tips, "Ask about players from the T20 leagues we cover")
 	}
 	if strings.Contains(contextLower, "team") && !strings.Contains(contextLower, "wpl") {
-		tips = append(tips, "Try asking about WPL teams like Mumbai Indians or Royal Challengers Bangalore")
+		tips = append(tips, "Try a team name with its league, such as Mumbai Indians in the WPL")
 	}
 
 	if len(suggestions) == 0 {
 		tips = append(tips, "Try asking about cricket statistics like runs, wickets, or strike rates")
 		suggestions = append(suggestions,
-			"Top 5 batters in WPL",
-			"Best bowling figures in WPL",
-			"Which team won the most matches in WPL 2023?",
+			"Top 5 run scorers across all T20 leagues",
+			"Most wickets in women's T20 leagues",
+			"Which team won the most matches in the WPL?",
 		)
 	}
 

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 )
 
 var (
@@ -234,6 +236,17 @@ func (c *JevClient) Evaluate(ctx context.Context, state map[string]interface{}, 
 	return &jevResp, nil
 }
 
+// jevLeagueCriteria offers every visible league as a choice, described by
+// its name and the names people use for it.
+func jevLeagueCriteria() map[string]string {
+	criteria := map[string]string{"unknown": "No league named, or several leagues"}
+	for _, l := range leagues.Default().Visible() {
+		names := append([]string{l.Name}, chatAliases[l.Code]...)
+		criteria[l.Code] = strings.Join(names, " / ")
+	}
+	return criteria
+}
+
 // ClassifyCricketQuery executes typed questions specifically for cricket statistics query routing and guardrails.
 func (c *JevClient) ClassifyCricketQuery(ctx context.Context, question string) (*CricketClassification, error) {
 	cacheKey := strings.ToLower(strings.TrimSpace(question))
@@ -262,23 +275,16 @@ func (c *JevClient) ClassifyCricketQuery(ctx context.Context, question string) (
 		},
 		"league": {
 			Type:         "choice",
-			Instructions: "Which cricket tournament or league is referenced, implied, or targeted?",
-			Criteria: map[string]string{
-				"IPL":     "Indian Premier League",
-				"WPL":     "Womens Premier League",
-				"BBL":     "Big Bash League",
-				"WBBL":    "Womens Big Bash League",
-				"SA20":    "SA20 League",
-				"unknown": "Unknown or not specified",
-			},
+			Instructions: "Which single cricket league is named in the question, or clearly implied by a team name in it (e.g. Perth Scorchers implies BBL)? Answer unknown when none is, or several are.",
+			Criteria:     jevLeagueCriteria(),
 		},
 		"phase": {
 			Type:         "choice",
-			Instructions: "Which phase of the match is queried?",
+			Instructions: "Which phase of the innings is queried?",
 			Criteria: map[string]string{
-				"powerplay": "Overs 0 to 5 (Powerplay)",
-				"middle":    "Overs 6 to 14 (Middle overs)",
-				"death":     "Overs 15 to 19 (Death overs)",
+				"powerplay": "Powerplay: the first 6 overs (first 5 sets in The Hundred)",
+				"middle":    "Middle overs",
+				"death":     "Death overs: the last 5 overs or sets",
 				"all":       "All overs or general match",
 			},
 		},

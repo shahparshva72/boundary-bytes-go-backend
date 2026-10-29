@@ -181,7 +181,7 @@ func TestAnswerFallsBackToGeminiWhenJevClassifiesComplex(t *testing.T) {
 
 func TestBuildFastPathQueries(t *testing.T) {
 	// 1. Leaderboards
-	q1 := buildFastPathQueries("leading_run_scorers", "IPL", "all", "top run scorers in IPL 2023")
+	q1 := buildFastPathQueries("leading_run_scorers", "unknown", "all", "top run scorers in IPL 2023", nil)
 	if len(q1) != 1 {
 		t.Fatalf("expected 1 query for leading_run_scorers, got %d", len(q1))
 	}
@@ -191,7 +191,7 @@ func TestBuildFastPathQueries(t *testing.T) {
 	}
 
 	// 2. Bowling (economy rate calculation and dynamic limit)
-	q2 := buildFastPathQueries("leading_wicket_takers", "WPL", "death", "Top 5 wicket takers in WPL")
+	q2 := buildFastPathQueries("leading_wicket_takers", "unknown", "death", "Top 5 wicket takers in WPL", nil)
 	if len(q2) != 1 {
 		t.Fatalf("expected 1 query for leading_wicket_takers, got %d", len(q2))
 	}
@@ -211,25 +211,25 @@ func TestBuildFastPathQueries(t *testing.T) {
 	}
 
 	// 3. Sixes
-	q3 := buildFastPathQueries("most_sixes", "IPL", "all", "most sixes in IPL")
+	q3 := buildFastPathQueries("most_sixes", "unknown", "all", "most sixes in IPL", nil)
 	if len(q3) != 1 {
 		t.Fatalf("expected 1 query for most_sixes, got %d", len(q3))
 	}
 
 	// 4. Team wins
-	q4 := buildFastPathQueries("team_record", "IPL", "all", "which team won the most matches")
+	q4 := buildFastPathQueries("team_record", "unknown", "all", "which team won the most matches", nil)
 	if len(q4) != 1 {
 		t.Fatalf("expected 1 query for team_record, got %d", len(q4))
 	}
 
 	// 5. Single player batting (2 queries: lookup + main)
-	q5 := buildFastPathQueries("player_batting_stat", "IPL", "all", "Virat Kohli runs in IPL 2023")
+	q5 := buildFastPathQueries("player_batting_stat", "unknown", "all", "Virat Kohli runs in IPL 2023", nil)
 	if len(q5) != 2 {
 		t.Fatalf("expected 2 queries for player_batting_stat, got %d", len(q5))
 	}
 
 	// 6. Head to head (3 queries: 2 lookups + main)
-	q6 := buildFastPathQueries("head_to_head", "IPL", "all", "Virat Kohli vs Jasprit Bumrah")
+	q6 := buildFastPathQueries("head_to_head", "unknown", "all", "Virat Kohli vs Jasprit Bumrah", nil)
 	if len(q6) != 3 {
 		t.Fatalf("expected 3 queries for head_to_head, got %d", len(q6))
 	}
@@ -238,13 +238,13 @@ func TestBuildFastPathQueries(t *testing.T) {
 	}
 
 	// 7. Complex query returns nil for Gemini fallback
-	qComplex := buildFastPathQueries("complex_query", "IPL", "all", "some complex question")
+	qComplex := buildFastPathQueries("complex_query", "unknown", "all", "some complex question", nil)
 	if qComplex != nil {
 		t.Fatalf("expected nil for complex_query to trigger Gemini fallback, got %v", qComplex)
 	}
 
 	// 8. Player query without player name returns nil for Gemini fallback
-	qNoPlayer := buildFastPathQueries("player_batting_stat", "BBL", "all", "Highest strike rates in BBL")
+	qNoPlayer := buildFastPathQueries("player_batting_stat", "unknown", "all", "Highest strike rates in BBL", nil)
 	if qNoPlayer != nil {
 		t.Fatalf("expected nil for player_batting_stat without named player, got %v", qNoPlayer)
 	}
@@ -331,7 +331,7 @@ func TestExtractHeadToHeadPlayersUppercaseSeparator(t *testing.T) {
 }
 
 func TestBuildFastPathQueriesPrefersWBBLOverBBL(t *testing.T) {
-	queries := buildFastPathQueries("leading_run_scorers", "unknown", "all", "top run scorers in WBBL")
+	queries := buildFastPathQueries("leading_run_scorers", "unknown", "all", "top run scorers in WBBL", nil)
 	if len(queries) != 1 || !strings.Contains(queries[0], "m.league = 'WBBL'") {
 		t.Fatalf("expected WBBL league filter, got %v", queries)
 	}
