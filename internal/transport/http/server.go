@@ -27,15 +27,17 @@ type Dependencies struct {
 	SQLGenerator ai.SQLGenerator
 	Classifier   texttosql.QueryClassifier
 	RateLimiter  *ratelimit.DailyLimiter
+	// ChatContext supplies leagues and seasons to text-to-SQL.
+	ChatContext *ai.ChatContext
 	// ResponseCache, when set, caches read-only stats responses.
 	ResponseCache func(http.Handler) http.Handler
 }
 
 type Server struct {
-	httpServer    *http.Server
-	Router        *chi.Mux
-	DB            postgres.Service
-	SQLGenerator  ai.SQLGenerator
+	httpServer   *http.Server
+	Router       *chi.Mux
+	DB           postgres.Service
+	SQLGenerator ai.SQLGenerator
 }
 
 func New(deps Dependencies) *Server {
@@ -51,6 +53,9 @@ func New(deps Dependencies) *Server {
 	textToSQLService := texttosql.New(deps.DB, deps.SQLGenerator)
 	if deps.Classifier != nil {
 		textToSQLService.WithClassifier(deps.Classifier)
+	}
+	if deps.ChatContext != nil {
+		textToSQLService.WithChatContext(deps.ChatContext)
 	}
 
 	r.Use(middleware.RequestID)

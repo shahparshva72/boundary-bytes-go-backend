@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 )
 
 const defaultGeminiBaseURL = "https://generativelanguage.googleapis.com/v1beta"
@@ -31,6 +33,22 @@ type GeminiSQLService struct {
 	model      string
 	baseURL    string
 	httpClient *http.Client
+	// prompt supplies the system prompt; nil uses the registry defaults.
+	prompt func(ctx context.Context) string
+}
+
+// WithPrompt sets the system prompt source (normally ChatContext.Prompt,
+// which includes the loaded seasons).
+func (s *GeminiSQLService) WithPrompt(prompt func(ctx context.Context) string) *GeminiSQLService {
+	s.prompt = prompt
+	return s
+}
+
+func (s *GeminiSQLService) systemPrompt(ctx context.Context) string {
+	if s.prompt != nil {
+		return s.prompt(ctx)
+	}
+	return BuildMasterPrompt(leagues.Default(), nil)
 }
 
 type SQLResponse struct {
@@ -96,7 +114,7 @@ func (s *GeminiSQLService) generate(ctx context.Context, userText string) ([]str
 
 	payload := geminiGenerateRequest{
 		SystemInstruction: geminiContent{
-			Parts: []geminiPart{{Text: masterPrompt}},
+			Parts: []geminiPart{{Text: s.systemPrompt(ctx)}},
 		},
 		Contents: []geminiContent{
 			{
@@ -263,7 +281,9 @@ func sqlResponseJSONSchema() map[string]any {
 	}
 }
 
-const masterPrompt = `You are a cricket statistics SQL expert. Convert natural language queries about cricket statistics into safe, accurate PostgreSQL queries for IPL data.
+// masterPromptTemplate is the Gemini system prompt; BuildMasterPrompt fills
+// the {{...}} sections from leagues.json and the loaded seasons.
+const masterPromptTemplate = `You are a cricket statistics SQL expert. Convert natural language queries about cricket statistics into safe, accurate PostgreSQL queries over T20 franchise and domestic league data.
 
 SYSTEM CONTEXT:
 - Purpose: Generate accurate, safe PostgreSQL SELECT queries over T20 data for cricket questions.
@@ -277,22 +297,9 @@ CURRENT DATE AND RELATIVE TIME:
 - "last X years": m.start_date >= (DATE_TRUNC('year', CURRENT_DATE) - (INTERVAL '1 year' * X)) AND m.start_date <= CURRENT_DATE.
 - "last X months": m.start_date >= (CURRENT_DATE - (INTERVAL '1 month' * X)) AND m.start_date <= CURRENT_DATE.
 - Fixed years such as 2018-2020: m.start_date >= '2018-01-01' AND m.start_date <= '2020-12-31'.
-- Prioritise using start_date over season for date based filtering except for BBL and SA20
-- Use m.start_date, never season text, for ordinary date filters.
+- Use m.start_date for ordinary date filters; see SEASONS for "<league> <year>" phrasing.
 
-BBL SEASON HANDLING:
-- BBL seasons span calendar years, so use m.season for BBL season phrasing.
-- "BBL 2023-24" or "BBL 2024" -> m.season = '2023/24'.
-- "BBL 2024-25" or "BBL 2025" -> m.season = '2024/25'.
-
-LEAGUE DETECTION:
-- If query mentions IPL or Indian Premier League: m.league = 'IPL'.
-- If query mentions WPL or Women's Premier League: m.league = 'WPL'.
-- If query mentions BBL, Big Bash League, or Big Bash: m.league = 'BBL'.
-- If query mentions WBBL, Women's Big Bash League, or Women's Big Bash: m.league = 'WBBL'.
-- If query mentions SA20, SA 20, or South Africa T20: m.league = 'SA20'.
-- If query mentions league-specific teams, use that league.
-- If no league is explicitly mentioned, default to IPL.
+{{LEAGUES_AND_SEASONS}}
 
 GLOBAL FILTERS:
 - Always join deliveries to matches for league and time filters.
@@ -316,7 +323,7 @@ SCHEMA:
 
 TEAM NAME NORMALIZATION:
 When returning or grouping team names, normalize known variants using a CTE named team_map with variant/canonical columns. Include at least these mappings:
-('Royal Challengers Bengaluru','Royal Challengers Bangalore'),
+{{TEAM_MAP}}
 ('RCB','Royal Challengers Bangalore'),
 ('CSK','Chennai Super Kings'),
 ('MI','Mumbai Indians'),
@@ -327,10 +334,7 @@ When returning or grouping team names, normalize known variants using a CTE name
 ('KXIP','Punjab Kings'),
 ('RR','Rajasthan Royals'),
 ('GT','Gujarat Titans'),
-('LSG','Lucknow Super Giants'),
-('Delhi Daredevils','Delhi Capitals'),
-('Kings XI Punjab','Punjab Kings'),
-('Rising Pune Supergiants','Rising Pune Supergiant').
+('LSG','Lucknow Super Giants').
 Select the normalized name as COALESCE(tm.canonical, team_field) AS team and group by its ordinal position.
 Define team_map once per query. When more than one team column needs normalizing (e.g. d.batting_team and mi.winner), prefer doing all normalization in a CTE first and aggregating over that CTE's plain columns; never select a team_map column (tm.canonical, tm_winner.canonical, ...) that is not itself grouped.
 When filtering on a user-supplied abbreviation, compare the normalized team field to the canonical name, not the abbreviation.
@@ -341,11 +345,7 @@ GROUP BY RULES (PostgreSQL rejects violations with SQLSTATE 42803):
 - Columns used only in FILTER/CASE inside an aggregate do not need grouping.
 - Minimum-volume thresholds ("minimum 100 balls", "at least 20 overs") go in HAVING, never WHERE.
 
-MATCH PHASES:
-- Over Number: CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) AS over_number.
-- Powerplay: over_number BETWEEN 0 AND 5.
-- Middle: over_number BETWEEN 6 AND 14.
-- Death: over_number BETWEEN 15 AND 19.
+{{OVERS_AND_PHASES}}
 
 PLAYER STYLE RULES:
 - Use player_style only through the registry join for the exact match/player identity.
@@ -390,10 +390,9 @@ BATTING METRICS:
 BOWLING METRICS:
 - wickets: COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket'))
 - runs_conceded: SUM(d.runs_off_bat + d.wides + d.noballs)
-- overs: COUNT(*)::DECIMAL / 6
-- economy_rate, always include for bowling questions: SUM(d.runs_off_bat + d.wides + d.noballs) / NULLIF(COUNT(*)::DECIMAL / 6, 0) AS economy_rate
-- average: SUM(d.runs_off_bat + d.wides + d.noballs)::DECIMAL / NULLIF(COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL), 0)
-- balls_bowled: COUNT(*)
+- balls_bowled (legal deliveries; wides and no-balls are re-bowled): COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)
+- economy_rate, always include for bowling questions: SUM(d.runs_off_bat + d.wides + d.noballs) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)::DECIMAL / 6, 0) AS economy_rate
+- average: SUM(d.runs_off_bat + d.wides + d.noballs)::DECIMAL / NULLIF(<wickets expression above>, 0)
 - matches: COUNT(DISTINCT d.match_id)
 
 WINS BY TEAM:
@@ -428,7 +427,7 @@ ORDER BY runs DESC
 LIMIT 20;
 
 Top wicket takers:
-SELECT d.bowler, COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')) AS wickets, SUM(d.runs_off_bat + d.wides + d.noballs) / NULLIF(COUNT(*)::DECIMAL / 6, 0) AS economy_rate
+SELECT d.bowler, COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')) AS wickets, SUM(d.runs_off_bat + d.wides + d.noballs) / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0)::DECIMAL / 6, 0) AS economy_rate
 FROM wpl_delivery d
 JOIN wpl_match m ON m.match_id = d.match_id
 WHERE m.league = 'IPL' AND d.innings <= 2
@@ -466,7 +465,7 @@ JOIN wpl_match m ON m.match_id = d.match_id
 LEFT JOIN team_map tm ON tm.variant = d.batting_team
 JOIN wpl_person_registry pr ON pr.match_id = d.match_id AND pr.person_name = d.bowler
 JOIN player_style ps ON ps.identifier = pr.registry_id
-WHERE m.league = 'IPL' AND d.innings <= 2 AND m.start_date >= '2020-01-01' AND COALESCE(tm.canonical, d.batting_team) = 'Royal Challengers Bangalore' AND CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) BETWEEN 6 AND 14 AND ps.bowling_type = 'spin'
+WHERE m.league = 'IPL' AND d.innings <= 2 AND m.start_date >= '2020-01-01' AND COALESCE(tm.canonical, d.batting_team) = 'Royal Challengers Bangalore' AND (CASE WHEN CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) < 6 THEN 'powerplay' WHEN CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) >= 15 THEN 'death' ELSE 'middle' END) = 'middle' AND ps.bowling_type = 'spin'
 GROUP BY 1
 LIMIT 20;
 
@@ -480,7 +479,7 @@ WITH team_map AS (
   LEFT JOIN team_map tm ON tm.variant = d.batting_team
   JOIN wpl_person_registry pr ON pr.match_id = d.match_id AND pr.person_name = d.bowler
   JOIN player_style ps ON ps.identifier = pr.registry_id
-  WHERE m.league = 'IPL' AND d.innings <= 2 AND m.start_date >= '2020-01-01' AND COALESCE(tm.canonical, d.batting_team) = 'Royal Challengers Bangalore' AND CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) BETWEEN 6 AND 14 AND ps.bowling_type = 'spin'
+  WHERE m.league = 'IPL' AND d.innings <= 2 AND m.start_date >= '2020-01-01' AND COALESCE(tm.canonical, d.batting_team) = 'Royal Challengers Bangalore' AND (CASE WHEN CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) < 6 THEN 'powerplay' WHEN CAST(SPLIT_PART(d.ball, '.', 1) AS INTEGER) >= 15 THEN 'death' ELSE 'middle' END) = 'middle' AND ps.bowling_type = 'spin'
 )
 SELECT q.team, COUNT(*) AS matches, COUNT(*) FILTER (WHERE COALESCE(wm.canonical, mi.winner) = q.team) AS wins, COUNT(*) FILTER (WHERE mi.winner IS NOT NULL AND COALESCE(wm.canonical, mi.winner) <> q.team) AS losses, (COUNT(*) FILTER (WHERE COALESCE(wm.canonical, mi.winner) = q.team)::DECIMAL * 100) / NULLIF(COUNT(*) FILTER (WHERE mi.winner IS NOT NULL), 0) AS win_pct
 FROM qualifying_matches q
