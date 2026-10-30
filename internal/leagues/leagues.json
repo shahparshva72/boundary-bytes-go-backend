@@ -1,0 +1,243 @@
+{
+  "leagues": [
+    {
+      "code": "IPL",
+      "name": "Indian Premier League",
+      "gender": "male",
+      "source": "ipl_csv2",
+      "events": ["Indian Premier League"],
+      "teamRenames": {
+        "Royal Challengers Bengaluru": "Royal Challengers Bangalore",
+        "Delhi Daredevils": "Delhi Capitals",
+        "Kings XI Punjab": "Punjab Kings",
+        "Rising Pune Supergiants": "Rising Pune Supergiant"
+      },
+      "visible": true
+    },
+    {
+      "code": "WPL",
+      "name": "Women's Premier League",
+      "gender": "female",
+      "source": "wpl_csv2",
+      "events": ["Women's Premier League"],
+      "teamRenames": {
+        "Royal Challengers Bengaluru": "Royal Challengers Bangalore"
+      },
+      "visible": true
+    },
+    {
+      "code": "BBL",
+      "name": "Big Bash League",
+      "gender": "male",
+      "source": "bbl_csv2",
+      "events": ["Big Bash League"],
+      "visible": true
+    },
+    {
+      "code": "WBBL",
+      "name": "Women's Big Bash League",
+      "gender": "female",
+      "source": "wbb_female_csv2",
+      "events": ["Women's Big Bash League"],
+      "visible": true
+    },
+    {
+      "code": "SA20",
+      "name": "SA20",
+      "gender": "male",
+      "source": "sat_male_csv2",
+      "events": ["SA20"],
+      "visible": true
+    },
+    {
+      "code": "PSL",
+      "name": "Pakistan Super League",
+      "gender": "male",
+      "source": "psl_csv2",
+      "events": ["Pakistan Super League"],
+      "visible": false
+    },
+    {
+      "code": "CPL",
+      "name": "Caribbean Premier League",
+      "gender": "male",
+      "source": "cpl_csv2",
+      "events": ["Caribbean Premier League"],
+      "visible": false
+    },
+    {
+      "code": "BPL",
+      "name": "Bangladesh Premier League",
+      "gender": "male",
+      "source": "bpl_csv2",
+      "events": ["Bangladesh Premier League"],
+      "visible": false
+    },
+    {
+      "code": "LPL",
+      "name": "Lanka Premier League",
+      "gender": "male",
+      "source": "lpl_csv2",
+      "events": ["Lanka Premier League"],
+      "visible": false
+    },
+    {
+      "code": "ILT20",
+      "name": "International League T20",
+      "gender": "male",
+      "source": "ilt_csv2",
+      "events": ["International League T20"],
+      "teamRenames": {
+        "Sharjah Warriors": "Sharjah Warriorz"
+      },
+      "visible": false
+    },
+    {
+      "code": "MLC",
+      "name": "Major League Cricket",
+      "gender": "male",
+      "source": "mlc_csv2",
+      "events": ["Major League Cricket"],
+      "visible": false
+    },
+    {
+      "code": "NPL",
+      "name": "Nepal Premier League",
+      "gender": "male",
+      "source": "npl_csv2",
+      "events": ["Nepal Premier League"],
+      "teamRenames": {
+        "Kathmandu Gurkhas": "Kathmandu Gorkhas"
+      },
+      "visible": false
+    },
+    {
+      "code": "NTB",
+      "name": "T20 Blast",
+      "gender": "male",
+      "source": "ntb_csv2",
+      "events": ["NatWest T20 Blast", "Vitality Blast", "Vitality Blast Men"],
+      "visible": false
+    },
+    {
+      "code": "SMA",
+      "name": "Syed Mushtaq Ali Trophy",
+      "gender": "male",
+      "source": "sma_csv2",
+      "events": ["Syed Mushtaq Ali Trophy"],
+      "visible": false
+    },
+    {
+      "code": "SSM",
+      "name": "Super Smash",
+      "gender": "male",
+      "source": "ssm_csv2",
+      "events": ["Super Smash", "HRV Twenty20", "HRV Cup"],
+      "visible": false
+    },
+    {
+      "code": "WSSM",
+      "name": "Women's Super Smash",
+      "gender": "female",
+      "source": "ssm_csv2",
+      "events": ["Women's Super Smash", "New Zealand Cricket Women's Twenty20"],
+      "visible": false
+    },
+    {
+      "code": "CTC",
+      "name": "CSA T20 Challenge",
+      "gender": "male",
+      "source": "ctc_csv2",
+      "events": ["CSA T20 Challenge", "Ram Slam T20 Challenge", "MiWAY T20 Challenge"],
+      "visible": false
+    },
+    {
+      "code": "HND",
+      "name": "The Hundred Men's Competition",
+      "gender": "male",
+      "source": "hnd_csv2",
+      "events": ["The Hundred Men's Competition"],
+      "visible": false
+    },
+    {
+      "code": "WHND",
+      "name": "The Hundred Women's Competition",
+      "gender": "female",
+      "source": "hnd_csv2",
+      "events": ["The Hundred Women's Competition"],
+      "visible": false
+    },
+    {
+      "code": "MSL",
+      "name": "Mzansi Super League",
+      "gender": "male",
+      "source": "msl_csv2",
+      "events": ["Mzansi Super League"],
+      "visible": false
+    },
+    {
+      "code": "IPT",
+      "name": "Cricket Ireland Inter-Provincial Twenty20 Trophy",
+      "gender": "male",
+      "source": "ipt_csv2",
+      "events": ["Cricket Ireland Inter-Provincial Twenty20 Trophy"],
+      "visible": false
+    },
+    {
+      "code": "ETPL",
+      "name": "European T20 Premier League",
+      "gender": "male",
+      "source": "etpl_csv2",
+      "events": ["European T20 Premier League"],
+      "visible": false
+    },
+    {
+      "code": "MCT",
+      "name": "Major Clubs T20 Tournament",
+      "gender": "male",
+      "source": "mct_csv2",
+      "events": ["Major Clubs T20 Tournament"],
+      "visible": false
+    },
+    {
+      "code": "WCL",
+      "name": "Women's Caribbean Premier League",
+      "gender": "female",
+      "source": "wcl_csv2",
+      "events": ["Women's Caribbean Premier League"],
+      "visible": false
+    },
+    {
+      "code": "WTB",
+      "name": "Women's T20 Blast",
+      "gender": "female",
+      "source": "wtb_csv2",
+      "events": ["Vitality Blast Women"],
+      "visible": false
+    },
+    {
+      "code": "CEC",
+      "name": "Charlotte Edwards Cup",
+      "gender": "female",
+      "source": "cec_csv2",
+      "events": ["Charlotte Edwards Cup"],
+      "visible": false
+    },
+    {
+      "code": "WSL",
+      "name": "Women's Cricket Super League",
+      "gender": "female",
+      "source": "wsl_csv2",
+      "events": ["Women's Cricket Super League"],
+      "visible": false
+    },
+    {
+      "code": "WTC",
+      "name": "Women's T20 Challenge",
+      "gender": "female",
+      "source": "wtc_csv2",
+      "events": ["Women's T20 Challenge", "Women's T20 Challenge Match"],
+      "visible": false
+    }
+  ]
+}

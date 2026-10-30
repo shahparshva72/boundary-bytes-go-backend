@@ -14,7 +14,7 @@ func (s *service) GetSeasonsByLeague(ctx context.Context, league string) ([]stri
 	query := `
 		SELECT DISTINCT season
 		FROM wpl_match_info
-		WHERE league = $1
+		WHERE league = ANY(string_to_array($1, ','))
 		ORDER BY season DESC;
 	`
 
@@ -44,7 +44,7 @@ func (s *service) GetLatestMatchDate(ctx context.Context, league string) (*time.
 	query := `
 		SELECT MAX(start_date)
 		FROM wpl_match
-		WHERE league = $1;
+		WHERE league = ANY(string_to_array($1, ','));
 	`
 
 	var latestDate sql.NullTime
@@ -69,24 +69,12 @@ func (s *service) GetMatchList(ctx context.Context, league string) ([]models.Mat
 				m.start_date,
 				m.venue,
 				STRING_AGG(DISTINCT
-					CASE
-						WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-						WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-						WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-						WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-						ELSE d.batting_team
-					END, ' vs ' ORDER BY
-					CASE
-						WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-						WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-						WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-						WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-						ELSE d.batting_team
-					END
+					` + standardizedBattingTeamSQL() + `, ' vs ' ORDER BY
+					` + standardizedBattingTeamSQL() + `
 				) AS teams
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
-			WHERE m.league = $1
+			WHERE m.league = ANY(string_to_array($1, ','))
 			GROUP BY m.match_id, m.league, m.season, m.start_date, m.venue
 		)
 		SELECT
@@ -162,7 +150,7 @@ func (s *service) GetMatches(
 		WITH paginated_matches AS (
 			SELECT match_id, league, season, date, venue, winner, winner_runs, winner_wickets
 			FROM wpl_match_info
-			WHERE league = $1 %s
+			WHERE league = ANY(string_to_array($1, ',')) %s
 			ORDER BY date DESC
 			LIMIT $%d OFFSET $%d
 		),
@@ -182,7 +170,7 @@ func (s *service) GetMatches(
 			GROUP BY d.match_id
 		),
 		total AS (
-			SELECT COUNT(*) as cnt FROM wpl_match_info WHERE league = $1 %s
+			SELECT COUNT(*) as cnt FROM wpl_match_info WHERE league = ANY(string_to_array($1, ',')) %s
 		)
 		SELECT
 			pm.match_id,
@@ -302,16 +290,10 @@ func (s *service) GetTeamWins(ctx context.Context, league string) ([]models.Team
 		WITH delivery_std AS (
 			SELECT
 				d.*,
-				CASE
-					WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-					WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-					WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-					WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-					ELSE d.batting_team
-				END AS std_batting_team
+				` + standardizedBattingTeamSQL() + ` AS std_batting_team
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
-			WHERE m.league = $1 AND d.innings <= 2
+			WHERE m.league = ANY(string_to_array($1, ',')) AND d.innings <= 2
 		),
 		runs_per_innings AS (
 			SELECT
@@ -394,13 +376,7 @@ func (s *service) GetTeamAverages(ctx context.Context, league string) ([]models.
 	query := `
 		WITH standardized_deliveries AS (
 			SELECT
-				CASE
-					WHEN d.batting_team = 'Royal Challengers Bengaluru' THEN 'Royal Challengers Bangalore'
-					WHEN d.batting_team = 'Delhi Daredevils' THEN 'Delhi Capitals'
-					WHEN d.batting_team = 'Kings XI Punjab' THEN 'Punjab Kings'
-					WHEN d.batting_team = 'Rising Pune Supergiants' THEN 'Rising Pune Supergiant'
-					ELSE d.batting_team
-				END as team,
+				` + standardizedBattingTeamSQL() + ` as team,
 				d.match_id,
 				d.innings,
 				d.runs_off_bat,
@@ -411,7 +387,7 @@ func (s *service) GetTeamAverages(ctx context.Context, league string) ([]models.
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.innings <= 2
-				AND m.league = $1
+				AND m.league = ANY(string_to_array($1, ','))
 		),
 		team_innings AS (
 			SELECT
