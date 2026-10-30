@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ai"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/cache"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/config"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ratelimit"
@@ -16,6 +18,14 @@ import (
 
 // chatContextRefresh is how often the chat re-reads season labels.
 const chatContextRefresh = time.Hour
+const (
+	// localCacheTTL keeps per-instance copies short so instances don't serve
+	// an entry long after the shared one expired.
+	localCacheTTL = 5 * time.Minute
+	// dataVersionInterval is how often the cache re-reads the data version,
+	// i.e. how soon a new parser load is reflected.
+	dataVersionInterval = time.Minute
+)
 
 type App struct {
 	config *config.Config
@@ -43,19 +53,34 @@ func New() (*App, error) {
 		Timeout: cfg.AI.Timeout,
 	}).WithPrompt(chatContext.Prompt)
 
-	var dailyLimiter *ratelimit.DailyLimiter
-	if cfg.RateLimit.Enabled() {
-		redisClient, err := ratelimit.NewUpstashClient(cfg.RateLimit.UpstashURL, cfg.RateLimit.UpstashToken)
+	var redisClient *ratelimit.UpstashClient
+	if cfg.RateLimit.RedisConfigured() {
+		redisClient, err = ratelimit.NewUpstashClient(cfg.RateLimit.UpstashURL, cfg.RateLimit.UpstashToken)
 		if err != nil {
 			return nil, fmt.Errorf("initialize upstash redis: %w", err)
 		}
+	}
 
+	var dailyLimiter *ratelimit.DailyLimiter
+	if cfg.RateLimit.Enabled() {
 		dailyLimiter, err = ratelimit.NewDailyLimiter(redisClient, cfg.RateLimit.IPHashSecret, cfg.RateLimit.DailyLimit)
 		if err != nil {
 			return nil, fmt.Errorf("initialize daily rate limiter: %w", err)
 		}
 	} else {
 		log.Println("Warning: text-to-sql rate limiting disabled (missing UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, or RATE_LIMIT_IP_HASH_SECRET)")
+	}
+
+	var responseCache func(http.Handler) http.Handler
+	if cfg.Cache.Enabled {
+		var store cache.Store = cache.NewMemoryStore(cfg.Cache.MemoryMB << 20)
+		if redisClient != nil {
+			store = cache.NewTieredStore(store, cache.NewRedisStore(redisClient, cache.MaxEntryBytes), localCacheTTL)
+			log.Printf("Response cache enabled: in-memory (%d MB) + Upstash, TTL %s", cfg.Cache.MemoryMB, cfg.Cache.TTL)
+		} else {
+			log.Printf("Response cache enabled: in-memory only (%d MB), TTL %s", cfg.Cache.MemoryMB, cfg.Cache.TTL)
+		}
+		responseCache = cache.Middleware(store, cache.NewDataVersion(db.GetDB(), dataVersionInterval), cfg.Cache.TTL)
 	}
 
 	backgroundCtx, stopBackground := context.WithCancel(context.Background())
@@ -74,11 +99,12 @@ func New() (*App, error) {
 	}
 
 	server := httpserver.New(httpserver.Dependencies{
-		DB:           db,
-		SQLGenerator: sqlGenerator,
-		Classifier:   jevClassifier,
-		RateLimiter:  dailyLimiter,
-		ChatContext:  chatContext,
+		DB:            db,
+		SQLGenerator:  sqlGenerator,
+		Classifier:    jevClassifier,
+		RateLimiter:   dailyLimiter,
+		ResponseCache: responseCache,
+		ChatContext:   chatContext,
 	})
 
 	return &App{

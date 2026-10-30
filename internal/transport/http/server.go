@@ -29,13 +29,15 @@ type Dependencies struct {
 	RateLimiter  *ratelimit.DailyLimiter
 	// ChatContext supplies leagues and seasons to text-to-SQL.
 	ChatContext *ai.ChatContext
+	// ResponseCache, when set, caches read-only stats responses.
+	ResponseCache func(http.Handler) http.Handler
 }
 
 type Server struct {
-	httpServer    *http.Server
-	Router        *chi.Mux
-	DB            postgres.Service
-	SQLGenerator  ai.SQLGenerator
+	httpServer   *http.Server
+	Router       *chi.Mux
+	DB           postgres.Service
+	SQLGenerator ai.SQLGenerator
 }
 
 func New(deps Dependencies) *Server {
@@ -61,6 +63,9 @@ func New(deps Dependencies) *Server {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
+	if deps.ResponseCache != nil {
+		r.Use(deps.ResponseCache)
+	}
 
 	r.NotFound(handlers.NotFoundHandler)
 
