@@ -13,6 +13,7 @@ import (
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/ratelimit"
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/repository/postgres"
+	"github.com/shahparshva72/boundary-bytes-go-backend/internal/service/texttosql"
 	httpserver "github.com/shahparshva72/boundary-bytes-go-backend/internal/transport/http"
 )
 
@@ -85,14 +86,16 @@ func New() (*App, error) {
 
 	backgroundCtx, stopBackground := context.WithCancel(context.Background())
 
-	var jevClassifier *ai.JevClient
+	// Stays a nil interface when Jev is disabled, so text-to-SQL skips it.
+	var classifier texttosql.QueryClassifier
 	if cfg.TypeSafe.Enabled() {
-		jevClassifier = ai.NewJevClient(ai.JevConfig{
+		jevClassifier := ai.NewJevClient(ai.JevConfig{
 			APIKey:  cfg.TypeSafe.APIKey,
 			BaseURL: cfg.TypeSafe.BaseURL,
 			Timeout: cfg.TypeSafe.Timeout,
 		})
 		go jevClassifier.KeepWarm(backgroundCtx)
+		classifier = jevClassifier
 		log.Println("TypeSafe AI (Jev System One) classifier enabled for fast cricket stats routing and guardrails")
 	} else {
 		log.Println("Notice: TypeSafe AI (Jev) disabled (missing TYPESAFE_API_KEY), queries will default to Gemini")
@@ -101,7 +104,7 @@ func New() (*App, error) {
 	server := httpserver.New(httpserver.Dependencies{
 		DB:            db,
 		SQLGenerator:  sqlGenerator,
-		Classifier:    jevClassifier,
+		Classifier:    classifier,
 		RateLimiter:   dailyLimiter,
 		ResponseCache: responseCache,
 		ChatContext:   chatContext,
