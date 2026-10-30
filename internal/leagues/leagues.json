@@ -157,6 +157,7 @@
       "gender": "male",
       "source": "hnd_csv2",
       "events": ["The Hundred Men's Competition"],
+      "ballsPerOver": 5,
       "visible": false
     },
     {
@@ -165,6 +166,7 @@
       "gender": "female",
       "source": "hnd_csv2",
       "events": ["The Hundred Women's Competition"],
+      "ballsPerOver": 5,
       "visible": false
     },
     {
