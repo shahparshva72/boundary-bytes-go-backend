@@ -16,6 +16,7 @@ type Config struct {
 	AI        AIConfig
 	TypeSafe  TypeSafeConfig
 	RateLimit RateLimitConfig
+	Cache     CacheConfig
 }
 
 type DBConfig struct {
@@ -54,6 +55,18 @@ func (c RateLimitConfig) Enabled() bool {
 	return c.UpstashURL != "" && c.UpstashToken != "" && c.IPHashSecret != ""
 }
 
+// RedisConfigured reports whether Upstash is available at all (the response
+// cache needs only the URL and token).
+func (c RateLimitConfig) RedisConfigured() bool {
+	return c.UpstashURL != "" && c.UpstashToken != ""
+}
+
+type CacheConfig struct {
+	Enabled  bool
+	TTL      time.Duration
+	MemoryMB int
+}
+
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found, using environment variables directly")
@@ -84,6 +97,11 @@ func Load() *Config {
 			UpstashToken: getEnv("UPSTASH_REDIS_REST_TOKEN", ""),
 			IPHashSecret: getEnv("RATE_LIMIT_IP_HASH_SECRET", ""),
 			DailyLimit:   getEnvInt("TEXT_TO_SQL_DAILY_LIMIT", 20),
+		},
+		Cache: CacheConfig{
+			Enabled:  getEnv("CACHE_ENABLED", "true") == "true",
+			TTL:      time.Duration(getEnvInt("CACHE_TTL_SECONDS", 3600)) * time.Second,
+			MemoryMB: getEnvInt("CACHE_MEMORY_MB", 32),
 		},
 	}
 }

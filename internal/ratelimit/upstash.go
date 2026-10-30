@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -86,6 +87,47 @@ func (c *UpstashClient) Expire(ctx context.Context, key string, ttlSeconds int) 
 	return err
 }
 
+// GetString returns the value at key and whether it exists. Unlike the
+// path-based commands it sends arguments in the request body, so values can
+// be large (cached API responses).
+func (c *UpstashClient) GetString(ctx context.Context, key string, maxBytes int64) (string, bool, error) {
+	result, err := c.bodyCommand(ctx, maxBytes, "GET", key)
+	if err != nil {
+		return "", false, err
+	}
+	if result == nil {
+		return "", false, nil
+	}
+	value, ok := result.(string)
+	if !ok {
+		return "", false, fmt.Errorf("unexpected redis get result type %T", result)
+	}
+	return value, true, nil
+}
+
+// SetEx stores value at key with a TTL in seconds.
+func (c *UpstashClient) SetEx(ctx context.Context, key, value string, ttlSeconds int) error {
+	_, err := c.bodyCommand(ctx, 1<<16, "SET", key, value, "EX", fmt.Sprintf("%d", ttlSeconds))
+	return err
+}
+
+// bodyCommand sends a command as Upstash's JSON-array request body.
+func (c *UpstashClient) bodyCommand(ctx context.Context, maxResponseBytes int64, args ...string) (any, error) {
+	payload, err := json.Marshal(args)
+	if err != nil {
+		return nil, fmt.Errorf("encode upstash command: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("build upstash request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	return c.do(req, maxResponseBytes)
+}
+
 func (c *UpstashClient) command(ctx context.Context, parts ...string) (any, error) {
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("redis command requires at least one part")
@@ -102,13 +144,17 @@ func (c *UpstashClient) command(ctx context.Context, parts ...string) (any, erro
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 
+	return c.do(req, 1<<20)
+}
+
+func (c *UpstashClient) do(req *http.Request, maxResponseBytes int64) (any, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("upstash request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read upstash response: %w", err)
 	}
