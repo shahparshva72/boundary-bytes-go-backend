@@ -69,7 +69,7 @@ func NewGeminiSQLService(config GeminiSQLConfig) *GeminiSQLService {
 
 	model := strings.TrimSpace(config.Model)
 	if model == "" {
-		model = "gemini-2.5-flash"
+		model = "gemini-3.8-flash"
 	}
 
 	baseURL := strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
@@ -123,10 +123,10 @@ func (s *GeminiSQLService) generate(ctx context.Context, userText string) ([]str
 			},
 		},
 		GenerationConfig: geminiGenerationConfig{
-			Temperature:        0.3,
-			MaxOutputTokens:    6000,
+			MaxOutputTokens:    8192,
 			ResponseMIMEType:   "application/json",
 			ResponseJSONSchema: sqlResponseJSONSchema(),
+			ThinkingConfig:     geminiThinkingConfig{ThinkingLevel: "low"},
 		},
 	}
 
@@ -205,10 +205,14 @@ type geminiPart struct {
 }
 
 type geminiGenerationConfig struct {
-	Temperature        float64        `json:"temperature"`
-	MaxOutputTokens    int            `json:"maxOutputTokens"`
-	ResponseMIMEType   string         `json:"responseMimeType"`
-	ResponseJSONSchema map[string]any `json:"responseJsonSchema"`
+	MaxOutputTokens    int                  `json:"maxOutputTokens"`
+	ResponseMIMEType   string               `json:"responseMimeType"`
+	ResponseJSONSchema map[string]any       `json:"responseJsonSchema"`
+	ThinkingConfig     geminiThinkingConfig `json:"thinkingConfig"`
+}
+
+type geminiThinkingConfig struct {
+	ThinkingLevel string `json:"thinkingLevel"`
 }
 
 type geminiGenerateResponse struct {

@@ -84,7 +84,7 @@ func Load() *Config {
 		},
 		AI: AIConfig{
 			GoogleAPIKey: getEnv("GOOGLE_API_KEY", ""),
-			GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash"),
+			GeminiModel:  getEnv("GEMINI_MODEL", "gemini-3.8-flash"),
 			Timeout:      time.Duration(getEnvInt("AI_TIMEOUT_SECONDS", 20)) * time.Second,
 		},
 		TypeSafe: TypeSafeConfig{
