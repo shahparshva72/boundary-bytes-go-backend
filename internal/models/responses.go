@@ -143,6 +143,7 @@ type LeagueConfigsResponse struct {
 }
 
 type RunRateTrendItem struct {
+	League     string  `json:"league,omitempty"`
 	Season     string  `json:"season"`
 	AvgRunRate float64 `json:"avgRunRate"`
 	TotalRuns  int     `json:"totalRuns"`

@@ -301,6 +301,46 @@ func (s *service) GetRunRateTrend(ctx context.Context, league string, team *stri
 	return items, nil
 }
 
+func (s *service) GetRunRateTrendByLeague(ctx context.Context, league string) ([]models.RunRateTrendItem, error) {
+	query := `
+		SELECT
+			m.league,
+			m.season,
+			SUM(d.runs_off_bat + d.extras)::int AS total_runs,
+			SUM(CASE WHEN d.wides = 0 OR d.wides IS NULL THEN 1 ELSE 0 END)::int AS total_balls
+		FROM wpl_delivery d
+		JOIN wpl_match m ON d.match_id = m.match_id
+		WHERE d.innings <= 2
+			AND m.league = ANY(string_to_array($1, ','))
+		GROUP BY m.league, m.season
+		ORDER BY m.league ASC, m.season ASC;
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, league)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []models.RunRateTrendItem{}
+	for rows.Next() {
+		var item models.RunRateTrendItem
+		if err := rows.Scan(&item.League, &item.Season, &item.TotalRuns, &item.TotalBalls); err != nil {
+			return nil, err
+		}
+		if item.TotalBalls > 0 {
+			item.AvgRunRate = math.Round((float64(item.TotalRuns)/(float64(item.TotalBalls)/6))*100) / 100
+		}
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 func (s *service) GetTeamRunRateProgression(
 	ctx context.Context,
 	league string,
