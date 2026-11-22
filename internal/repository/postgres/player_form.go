@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	bowlerWicketTypesSQL = "('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')"
+	bowlerWicketTypesSQL     = "('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')"
 	battingDismissalTypesSQL = "('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out', 'retired out', 'obstructing the field', 'hit the ball twice', 'handled the ball', 'timed out')"
 )
 
