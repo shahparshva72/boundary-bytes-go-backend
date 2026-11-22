@@ -22,6 +22,9 @@ type fakeRepository struct {
 	listEntries     []models.PlayerSlugEntry
 	listTotal       int
 	listErr         error
+	recentForm      models.PlayerRecentForm
+	recentFormErr   error
+	inningsSplits   models.PlayerInningsSplits
 }
 
 func (r fakeRepository) GetAllLeagues(ctx context.Context) ([]string, error) {
@@ -46,6 +49,14 @@ func (r fakeRepository) ListPlayerSlugs(ctx context.Context, limit, offset int) 
 
 func (r fakeRepository) GetPlayerStyleByName(ctx context.Context, playerName string) (*models.PlayerProfileBio, error) {
 	return r.style, r.styleErr
+}
+
+func (r fakeRepository) GetPlayerRecentForm(ctx context.Context, league, player string, limit int) (models.PlayerRecentForm, error) {
+	return r.recentForm, r.recentFormErr
+}
+
+func (r fakeRepository) GetPlayerInningsSplits(ctx context.Context, league, player string) (models.PlayerInningsSplits, error) {
+	return r.inningsSplits, nil
 }
 
 type fakeStatsService struct {
@@ -221,4 +232,43 @@ func TestListPlayerSlugsReturnsEntriesAndTotal(t *testing.T) {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func TestGetPlayerProfileIncludesRecentFormAndInningsSplits(t *testing.T) {
+	repo := fakeRepository{
+		slugName:    "Player One",
+		slugLeagues: []string{"IPL", "PSL"},
+		recentForm: models.PlayerRecentForm{
+			Batting: []models.PlayerFormBatting{{MatchID: 1, Runs: 42, Balls: 30}},
+		},
+		inningsSplits: models.PlayerInningsSplits{
+			Batting: []models.PlayerBattingSplit{{Innings: 2, Played: 4, Runs: 120}},
+		},
+	}
+	service := New(repo, fakeStatsService{result: &statsservice.PlayerCompareResult{}})
+
+	profile, err := service.GetPlayerProfile(context.Background(), "player-one")
+	if err != nil {
+		t.Fatalf("GetPlayerProfile() error = %v", err)
+	}
+	if len(profile.RecentForm.Batting) != 1 || profile.RecentForm.Batting[0].Runs != 42 {
+		t.Fatalf("recent form = %#v", profile.RecentForm)
+	}
+	if len(profile.InningsSplits.Batting) != 1 || profile.InningsSplits.Batting[0].Innings != 2 {
+		t.Fatalf("innings splits = %#v", profile.InningsSplits)
+	}
+}
+
+func TestGetPlayerProfileFailsWhenRecentFormFails(t *testing.T) {
+	wantErr := errors.New("form query failed")
+	repo := fakeRepository{
+		slugName:      "Player One",
+		slugLeagues:   []string{"IPL"},
+		recentFormErr: wantErr,
+	}
+	service := New(repo, fakeStatsService{result: &statsservice.PlayerCompareResult{}})
+
+	if _, err := service.GetPlayerProfile(context.Background(), "player-one"); !errors.Is(err, wantErr) {
+		t.Fatalf("GetPlayerProfile() error = %v, want %v", err, wantErr)
+	}
 }

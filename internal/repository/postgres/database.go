@@ -25,6 +25,8 @@ type Service interface {
 	GetPlayerBySlug(ctx context.Context, slug string) (string, []string, error)
 	ListPlayerSlugs(ctx context.Context, limit, offset int) ([]models.PlayerSlugEntry, int, error)
 	GetPlayerStyleByName(ctx context.Context, playerName string) (*models.PlayerProfileBio, error)
+	GetPlayerRecentForm(ctx context.Context, league, player string, limit int) (models.PlayerRecentForm, error)
+	GetPlayerInningsSplits(ctx context.Context, league, player string) (models.PlayerInningsSplits, error)
 	GetLeagueConfigStats(ctx context.Context) ([]models.LeagueConfigItem, error)
 	GetSeasonsByLeague(ctx context.Context, league string) ([]string, error)
 	GetLatestMatchDate(ctx context.Context, league string) (*time.Time, error)

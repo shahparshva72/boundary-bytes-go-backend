@@ -84,10 +84,12 @@ func GetPlayerProfile(service *players.Service) http.HandlerFunc {
 		}
 
 		resp := models.PlayerProfileResponse{
-			Slug:        result.Slug,
-			Name:        result.Name,
-			Bio:         result.Bio,
-			LeagueStats: result.LeagueStats,
+			Slug:          result.Slug,
+			Name:          result.Name,
+			Bio:           result.Bio,
+			LeagueStats:   result.LeagueStats,
+			RecentForm:    result.RecentForm,
+			InningsSplits: result.InningsSplits,
 			Metadata: models.PlayerProfileMetadata{
 				AvailableLeagues: result.Leagues,
 			},
