@@ -1144,11 +1144,17 @@ func (s *service) GetFallOfWickets(
 				d.match_id,
 				d.innings,
 				d.ball,
+				CAST(SPLIT_PART(d.ball, '.', 1) AS int) as over_number,
+				CAST(SPLIT_PART(d.ball, '.', 2) AS int) as ball_number,
+				d.id as delivery_id,
 				d.player_dismissed,
 				d.wicket_type,
 				d.bowler,
 				` + standardizedBattingTeamSQL() + ` as batting_team,
-				ROW_NUMBER() OVER (PARTITION BY d.match_id, d.innings ORDER BY d.ball) as wicket_number
+				ROW_NUMBER() OVER (
+					PARTITION BY d.match_id, d.innings
+					ORDER BY CAST(SPLIT_PART(d.ball, '.', 1) AS int), CAST(SPLIT_PART(d.ball, '.', 2) AS int), d.id
+				) as wicket_number
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			WHERE d.player_dismissed IS NOT NULL
@@ -1164,8 +1170,9 @@ func (s *service) GetFallOfWickets(
 			FROM wicket_details wd
 			JOIN wpl_delivery d ON d.match_id = wd.match_id
 				AND d.innings = wd.innings
-				AND d.ball <= wd.ball
-			GROUP BY wd.match_id, wd.innings, wd.ball, wd.player_dismissed, wd.wicket_type, wd.bowler, wd.batting_team, wd.wicket_number
+				AND (CAST(SPLIT_PART(d.ball, '.', 1) AS int), CAST(SPLIT_PART(d.ball, '.', 2) AS int), d.id)
+					<= (wd.over_number, wd.ball_number, wd.delivery_id)
+			GROUP BY wd.match_id, wd.innings, wd.ball, wd.over_number, wd.ball_number, wd.delivery_id, wd.player_dismissed, wd.wicket_type, wd.bowler, wd.batting_team, wd.wicket_number
 		)
 		SELECT
 			innings,
