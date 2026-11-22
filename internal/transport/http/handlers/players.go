@@ -90,6 +90,7 @@ func GetPlayerProfile(service *players.Service) http.HandlerFunc {
 			LeagueStats:   result.LeagueStats,
 			RecentForm:    result.RecentForm,
 			InningsSplits: result.InningsSplits,
+			Career:        result.Career,
 			Metadata: models.PlayerProfileMetadata{
 				AvailableLeagues: result.Leagues,
 			},

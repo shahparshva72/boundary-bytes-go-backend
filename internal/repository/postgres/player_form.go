@@ -25,6 +25,7 @@ func battingInningsSQL() string {
 			d.match_id,
 			d.innings,
 			m.league,
+			m.season,
 			m.start_date,
 			MAX(%[2]s) AS opposition,
 			SUM(d.runs_off_bat) AS runs,
@@ -44,7 +45,7 @@ func battingInningsSQL() string {
 		WHERE d.striker = $1
 			AND m.league = ANY(string_to_array($2, ','))
 			AND d.innings <= 2
-		GROUP BY d.match_id, d.innings, m.league, m.start_date`, battingDismissalTypesSQL, leagues.Default().TeamNameSQL("d.bowling_team"))
+		GROUP BY d.match_id, d.innings, m.league, m.season, m.start_date`, battingDismissalTypesSQL, leagues.Default().TeamNameSQL("d.bowling_team"))
 }
 
 func bowlingInningsSQL() string {
@@ -53,6 +54,7 @@ func bowlingInningsSQL() string {
 			d.match_id,
 			d.innings,
 			m.league,
+			m.season,
 			m.start_date,
 			MAX(%s) AS opposition,
 			COALESCE(MAX(mi.balls_per_over), 6) AS balls_per_over,
@@ -66,7 +68,7 @@ func bowlingInningsSQL() string {
 		WHERE d.bowler = $1
 			AND m.league = ANY(string_to_array($2, ','))
 			AND d.innings <= 2
-		GROUP BY d.match_id, d.innings, m.league, m.start_date`, standardizedBattingTeamSQL(), bowlerWicketTypesSQL)
+		GROUP BY d.match_id, d.innings, m.league, m.season, m.start_date`, standardizedBattingTeamSQL(), bowlerWicketTypesSQL)
 }
 
 func (s *service) GetPlayerRecentForm(ctx context.Context, league, player string, limit int) (models.PlayerRecentForm, error) {
@@ -87,10 +89,11 @@ func (s *service) GetPlayerRecentForm(ctx context.Context, league, player string
 		var (
 			item      models.PlayerFormBatting
 			innings   int
+			season    string
 			date      time.Time
 			dismissed bool
 		)
-		if err := battingRows.Scan(&item.MatchID, &innings, &item.League, &date, &item.Opposition, &item.Runs, &item.Balls, &item.Fours, &item.Sixes, &dismissed); err != nil {
+		if err := battingRows.Scan(&item.MatchID, &innings, &item.League, &season, &date, &item.Opposition, &item.Runs, &item.Balls, &item.Fours, &item.Sixes, &dismissed); err != nil {
 			return form, fmt.Errorf("recent batting form: %w", err)
 		}
 		item.Date = date.Format("2006-01-02")
@@ -116,11 +119,12 @@ func (s *service) GetPlayerRecentForm(ctx context.Context, league, player string
 		var (
 			item         models.PlayerFormBowling
 			innings      int
+			season       string
 			date         time.Time
 			ballsPerOver int
 			balls        int
 		)
-		if err := bowlingRows.Scan(&item.MatchID, &innings, &item.League, &date, &item.Opposition, &ballsPerOver, &balls, &item.RunsConceded, &item.Wickets, &item.DotBalls); err != nil {
+		if err := bowlingRows.Scan(&item.MatchID, &innings, &item.League, &season, &date, &item.Opposition, &ballsPerOver, &balls, &item.RunsConceded, &item.Wickets, &item.DotBalls); err != nil {
 			return form, fmt.Errorf("recent bowling form: %w", err)
 		}
 		item.Date = date.Format("2006-01-02")

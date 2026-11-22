@@ -21,6 +21,7 @@ type Repository interface {
 	GetPlayerStyleByName(ctx context.Context, playerName string) (*models.PlayerProfileBio, error)
 	GetPlayerRecentForm(ctx context.Context, league, player string, limit int) (models.PlayerRecentForm, error)
 	GetPlayerInningsSplits(ctx context.Context, league, player string) (models.PlayerInningsSplits, error)
+	GetPlayerCareer(ctx context.Context, league, player string) (models.PlayerCareer, error)
 }
 
 type StatsService interface {
@@ -44,6 +45,7 @@ type PlayerProfileResult struct {
 	LeagueStats   []models.PlayerProfileLeagueStats
 	RecentForm    models.PlayerRecentForm
 	InningsSplits models.PlayerInningsSplits
+	Career        models.PlayerCareer
 	Leagues       []string
 }
 
@@ -136,6 +138,13 @@ func (s *Service) GetPlayerProfile(ctx context.Context, slug string) (*PlayerPro
 		return err
 	})
 
+	var career models.PlayerCareer
+	eg.Go(func() error {
+		var err error
+		career, err = s.repository.GetPlayerCareer(ctx, leagueScope, playerName)
+		return err
+	})
+
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
@@ -154,6 +163,7 @@ func (s *Service) GetPlayerProfile(ctx context.Context, slug string) (*PlayerPro
 		LeagueStats:   leagueStatsMu,
 		RecentForm:    recentForm,
 		InningsSplits: inningsSplits,
+		Career:        career,
 		Leagues:       s.availableLeagues(ctx),
 	}, nil
 }
