@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -129,7 +130,7 @@ func TestLeagueAdjustedMetricsJoinTheBaselineOnlyWhenRequested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildStatExplorerQueries() error = %v", err)
 	}
-	if strings.Contains(built.sql, "league_baseline") {
+	if strings.Contains(built.sql, "league_phase_baseline") {
 		t.Errorf("baseline joined without an adjusted metric:\n%s", built.sql)
 	}
 
@@ -139,14 +140,14 @@ func TestLeagueAdjustedMetricsJoinTheBaselineOnlyWhenRequested(t *testing.T) {
 		t.Fatalf("buildStatExplorerQueries() error = %v", err)
 	}
 	for _, q := range []string{built.sql, built.countSQL} {
-		for _, want := range []string{"league_baseline AS (", "LEFT JOIN league_baseline lb", "SUM(lb.batting_runs_per_ball) FILTER (WHERE d.wides = 0) AS expected_runs"} {
+		for _, want := range []string{"LEFT JOIN league_phase_baseline lb", "SUM(lb.batting_runs_per_ball) FILTER (WHERE d.wides = 0) AS expected_runs"} {
 			if !strings.Contains(q, want) {
 				t.Errorf("query is missing %q", want)
 			}
 		}
 	}
-	if len(built.args) != 2 {
-		t.Errorf("args = %v, want the league scope twice", built.args)
+	if len(built.args) != 1 {
+		t.Errorf("args = %v, want only the league scope", built.args)
 	}
 
 	request.ReportType = "bowling"
@@ -157,5 +158,18 @@ func TestLeagueAdjustedMetricsJoinTheBaselineOnlyWhenRequested(t *testing.T) {
 	}
 	if !strings.Contains(built.sql, "SUM(lb.bowling_runs_per_ball) FILTER (WHERE d.wides = 0 AND d.noballs = 0) AS expected_runs") {
 		t.Errorf("bowling baseline missing:\n%s", built.sql)
+	}
+}
+
+func TestBaselineMigrationUsesTheAPIPhaseBoundaries(t *testing.T) {
+	migration, err := os.ReadFile("../../../migrations/000011_add_league_phase_baseline.up.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	normalize := func(sql string) string {
+		return strings.Join(strings.Fields(strings.NewReplacer(`"`, "", "\n", " ").Replace(sql)), " ")
+	}
+	if !strings.Contains(normalize(string(migration)), normalize(phaseSQL())) {
+		t.Errorf("migration phase expression differs from phaseSQL():\n%s", normalize(phaseSQL()))
 	}
 }
