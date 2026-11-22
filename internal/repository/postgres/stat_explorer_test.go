@@ -97,3 +97,23 @@ func TestBuildBowlingQueriesQualifyOnBowlingTotals(t *testing.T) {
 		t.Errorf("boundary %% does not use boundaries conceded:\n%s", built.sql)
 	}
 }
+
+func TestBuildTeamReportQueriesSplitByBattingOrder(t *testing.T) {
+	request := models.StatExplorerRunRequest{
+		ReportType: "team",
+		Dimensions: []string{"team"},
+		Metrics:    []string{"matchesBattingFirst", "winPctBattingFirst", "matchesBattingSecond", "winPctBattingSecond"},
+		Pagination: models.StatExplorerRunPagination{Page: 1, PageSize: 20},
+	}
+
+	built, err := buildStatExplorerQueries(request, "IPL")
+	if err != nil {
+		t.Fatalf("buildStatExplorerQueries() error = %v", err)
+	}
+
+	for _, want := range []string{"1 AS bat_order", "2 AS bat_order", `AS "winPctBattingFirst"`, `AS "winPctBattingSecond"`} {
+		if !strings.Contains(built.sql, want) {
+			t.Errorf("query is missing %q:\n%s", want, built.sql)
+		}
+	}
+}

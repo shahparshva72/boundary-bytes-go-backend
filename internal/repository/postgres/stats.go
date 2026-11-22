@@ -1343,7 +1343,7 @@ func statExplorerAllowedMetrics(reportType string) []string {
 	case "bowling":
 		return []string{"wickets", "ballsBowled", "runsConceded", "innings", "economyRate", "bowlingAverage", "bowlingStrikeRate", "fourWickets", "fiveWickets", "dotBalls", "dotBallPct", "boundaryPct"}
 	case "team":
-		return []string{"matchesPlayed", "wins", "losses", "winPct", "winsBattingFirst", "winsBattingSecond"}
+		return []string{"matchesPlayed", "wins", "losses", "winPct", "winsBattingFirst", "winsBattingSecond", "matchesBattingFirst", "matchesBattingSecond", "winPctBattingFirst", "winPctBattingSecond"}
 	case "match":
 		return []string{"matches", "runs", "wickets", "ballsFaced", "ballsBowled", "economyRate", "strikeRate"}
 	default:
