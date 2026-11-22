@@ -11,6 +11,7 @@ type Repository interface {
 	GetAllLeagues(ctx context.Context) ([]string, error)
 	GetBowlingWicketTypes(ctx context.Context, league string, page, limit int) ([]models.BowlingWicketTypesItem, int, error)
 	GetFallOfWickets(ctx context.Context, league string, matchID int) (*models.FallOfWicketsResponse, error)
+	GetMatchDetail(ctx context.Context, league string, matchID int) (*models.MatchDetailResponse, error)
 	GetMultiMatchup(ctx context.Context, league, player string, opponents []string, mode string) ([]models.MultiMatchupItem, error)
 	GetPlayerProgression(ctx context.Context, league, player string, innings *int) ([]models.PlayerProgressionPoint, models.PlayerProgressionMetadata, error)
 }
@@ -100,6 +101,10 @@ func (s *Service) GetFallOfWickets(ctx context.Context, league string, matchID i
 	}
 	data.Metadata.AvailableLeagues = s.availableLeagues(ctx)
 	return data, nil
+}
+
+func (s *Service) GetMatchDetail(ctx context.Context, league string, matchID int) (*models.MatchDetailResponse, error) {
+	return s.repository.GetMatchDetail(ctx, league, matchID)
 }
 
 func (s *Service) availableLeagues(ctx context.Context) []string {

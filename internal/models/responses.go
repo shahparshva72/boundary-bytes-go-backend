@@ -737,3 +737,102 @@ type PlayerCareer struct {
 	Seasons []PlayerCareerRow `json:"seasons"`
 	Total   *PlayerCareerRow  `json:"total,omitempty"`
 }
+
+type MatchDetailInfo struct {
+	ID            int      `json:"id"`
+	League        string   `json:"league"`
+	Season        string   `json:"season"`
+	Date          string   `json:"date"`
+	Venue         string   `json:"venue"`
+	City          string   `json:"city"`
+	Teams         []string `json:"teams"`
+	TossWinner    string   `json:"tossWinner"`
+	TossDecision  string   `json:"tossDecision"`
+	PlayerOfMatch string   `json:"playerOfMatch,omitempty"`
+	Result        string   `json:"result"`
+	BallsPerOver  int      `json:"ballsPerOver"`
+}
+
+type MatchBattingRow struct {
+	Player     string  `json:"player"`
+	Runs       int     `json:"runs"`
+	Balls      int     `json:"balls"`
+	Fours      int     `json:"fours"`
+	Sixes      int     `json:"sixes"`
+	StrikeRate float64 `json:"strikeRate"`
+	Dismissal  string  `json:"dismissal"`
+	NotOut     bool    `json:"notOut"`
+}
+
+type MatchBowlingRow struct {
+	Player       string  `json:"player"`
+	Overs        float64 `json:"overs"`
+	Balls        int     `json:"balls"`
+	RunsConceded int     `json:"runsConceded"`
+	Wickets      int     `json:"wickets"`
+	Economy      float64 `json:"economy"`
+	DotBalls     int     `json:"dotBalls"`
+	Wides        int     `json:"wides"`
+	Noballs      int     `json:"noballs"`
+}
+
+type MatchExtras struct {
+	Total   int `json:"total"`
+	Wides   int `json:"wides"`
+	Noballs int `json:"noballs"`
+	Byes    int `json:"byes"`
+	Legbyes int `json:"legbyes"`
+	Penalty int `json:"penalty"`
+}
+
+type MatchPartnership struct {
+	Wicket       int    `json:"wicket"`
+	Batter1      string `json:"batter1"`
+	Batter2      string `json:"batter2"`
+	Runs         int    `json:"runs"`
+	Balls        int    `json:"balls"`
+	Batter1Runs  int    `json:"batter1Runs"`
+	Batter2Runs  int    `json:"batter2Runs"`
+	Batter1Balls int    `json:"batter1Balls"`
+	Batter2Balls int    `json:"batter2Balls"`
+	Unbroken     bool   `json:"unbroken"`
+}
+
+type MatchOver struct {
+	Over           int `json:"over"`
+	Runs           int `json:"runs"`
+	Wickets        int `json:"wickets"`
+	CumulativeRuns int `json:"cumulativeRuns"`
+	CumulativeWkts int `json:"cumulativeWickets"`
+}
+
+type MatchPhaseSummary struct {
+	Phase   string  `json:"phase"`
+	Runs    int     `json:"runs"`
+	Balls   int     `json:"balls"`
+	Wickets int     `json:"wickets"`
+	RunRate float64 `json:"runRate"`
+}
+
+type MatchInnings struct {
+	Innings       int                  `json:"innings"`
+	BattingTeam   string               `json:"battingTeam"`
+	BowlingTeam   string               `json:"bowlingTeam"`
+	Runs          int                  `json:"runs"`
+	Wickets       int                  `json:"wickets"`
+	Overs         float64              `json:"overs"`
+	Balls         int                  `json:"balls"`
+	RunRate       float64              `json:"runRate"`
+	Extras        MatchExtras          `json:"extras"`
+	Batting       []MatchBattingRow    `json:"batting"`
+	Bowling       []MatchBowlingRow    `json:"bowling"`
+	Partnerships  []MatchPartnership   `json:"partnerships"`
+	OverByOver    []MatchOver          `json:"overByOver"`
+	Phases        []MatchPhaseSummary  `json:"phases"`
+	FallOfWickets []FallOfWicketsEntry `json:"fallOfWickets"`
+}
+
+type MatchDetailResponse struct {
+	Match   MatchDetailInfo `json:"match"`
+	Innings []MatchInnings  `json:"innings"`
+}

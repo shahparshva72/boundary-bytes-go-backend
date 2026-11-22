@@ -80,6 +80,7 @@ func New(deps Dependencies) *Server {
 	r.Get("/api/stats/latest-match-date", handlers.GetLatestMatchDate(matchesService))
 	r.Get("/api/matches/list", handlers.GetMatchList(matchesService))
 	r.Get("/api/matches", handlers.GetMatches(matchesService))
+	r.Get("/api/matches/{matchId}", handlers.GetMatchDetail(advancedStatsService))
 	r.Get("/api/stats/team-wins", handlers.GetTeamWins(matchesService))
 	r.Get("/api/stats/team-averages", handlers.GetTeamAverages(matchesService))
 	r.Get("/api/stats/runrate-trend", handlers.GetRunRateTrend(statsService))
