@@ -12,7 +12,7 @@ import (
 
 const (
 	bowlerWicketTypesSQL = "('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')"
-	notDismissedTypesSQL = "('retired hurt', 'retired not out')"
+	battingDismissalTypesSQL = "('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket', 'run out', 'retired out', 'obstructing the field', 'hit the ball twice', 'handled the ball', 'timed out')"
 )
 
 func roundTo2(value float64) float64 {
@@ -36,17 +36,15 @@ func battingInningsSQL() string {
 				FROM wpl_delivery w
 				WHERE w.match_id = d.match_id
 					AND w.innings = d.innings
-					AND (
-						(w.player_dismissed = $1 AND w.wicket_type NOT IN %[1]s)
-						OR (w.other_player_dismissed = $1 AND w.other_wicket_type NOT IN %[1]s)
-					)
+					AND w.player_dismissed = $1
+					AND w.wicket_type IN %[1]s
 			) AS dismissed
 		FROM wpl_delivery d
 		JOIN wpl_match m ON d.match_id = m.match_id
 		WHERE d.striker = $1
 			AND m.league = ANY(string_to_array($2, ','))
 			AND d.innings <= 2
-		GROUP BY d.match_id, d.innings, m.league, m.start_date`, notDismissedTypesSQL, leagues.Default().TeamNameSQL("d.bowling_team"))
+		GROUP BY d.match_id, d.innings, m.league, m.start_date`, battingDismissalTypesSQL, leagues.Default().TeamNameSQL("d.bowling_team"))
 }
 
 func bowlingInningsSQL() string {
