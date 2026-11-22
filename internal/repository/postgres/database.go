@@ -29,6 +29,8 @@ type Service interface {
 	GetPlayerInningsSplits(ctx context.Context, league, player string) (models.PlayerInningsSplits, error)
 	GetPlayerCareer(ctx context.Context, league, player string) (models.PlayerCareer, error)
 	GetMatchDetail(ctx context.Context, league string, matchID int) (*models.MatchDetailResponse, error)
+	GetVenueStats(ctx context.Context, league string, since, minMatches int, sort string, page, limit int) ([]models.VenueStatsItem, int, error)
+	GetLeagueComparison(ctx context.Context, league string, since int) ([]models.LeagueComparisonItem, error)
 	GetLeagueConfigStats(ctx context.Context) ([]models.LeagueConfigItem, error)
 	GetSeasonsByLeague(ctx context.Context, league string) ([]string, error)
 	GetLatestMatchDate(ctx context.Context, league string) (*time.Time, error)
