@@ -34,34 +34,39 @@ var statExplorerDimensionLabels = map[string]string{
 }
 
 var statExplorerMetricLabels = map[string]string{
-	"runs":              "Runs",
-	"ballsfaced":        "Balls Faced",
-	"innings":           "Innings",
-	"notouts":           "Not Outs",
-	"highestscore":      "Highest Score",
-	"fours":             "Fours",
-	"sixes":             "Sixes",
-	"fifties":           "50s",
-	"hundreds":          "100s",
-	"strikerate":        "Strike Rate",
-	"average":           "Average",
-	"dismissals":        "Dismissals",
-	"dotballs":          "Dot Balls",
-	"wickets":           "Wickets",
-	"ballsbowled":       "Balls Bowled",
-	"runsconceded":      "Runs Conceded",
-	"economyrate":       "Economy Rate",
-	"bowlingaverage":    "Bowling Average",
-	"bowlingstrikerate": "Bowling SR",
-	"fourwickets":       "4 Wickets",
-	"fivewickets":       "5 Wickets",
-	"matchesplayed":     "Matches",
-	"wins":              "Wins",
-	"losses":            "Losses",
-	"winpct":            "Win %",
-	"matches":           "Matches",
-	"winsbattingfirst":  "Batting 1st Wins",
-	"winsbattingsecond": "Batting 2nd Wins",
+	"runs":                  "Runs",
+	"ballsfaced":            "Balls Faced",
+	"innings":               "Innings",
+	"notouts":               "Not Outs",
+	"highestscore":          "Highest Score",
+	"fours":                 "Fours",
+	"sixes":                 "Sixes",
+	"fifties":               "50s",
+	"hundreds":              "100s",
+	"strikerate":            "Strike Rate",
+	"average":               "Average",
+	"dismissals":            "Dismissals",
+	"dotballs":              "Dot Balls",
+	"wickets":               "Wickets",
+	"ballsbowled":           "Balls Bowled",
+	"runsconceded":          "Runs Conceded",
+	"economyrate":           "Economy Rate",
+	"bowlingaverage":        "Bowling Average",
+	"bowlingstrikerate":     "Bowling SR",
+	"fourwickets":           "4 Wickets",
+	"fivewickets":           "5 Wickets",
+	"matchesplayed":         "Matches",
+	"wins":                  "Wins",
+	"losses":                "Losses",
+	"winpct":                "Win %",
+	"matches":               "Matches",
+	"winsbattingfirst":      "Batting 1st Wins",
+	"winsbattingsecond":     "Batting 2nd Wins",
+	"boundarypct":           "Boundary %",
+	"dotballpct":            "Dot Ball %",
+	"ballsperboundary":      "Balls / Boundary",
+	"ballspersix":           "Balls / Six",
+	"nonboundarystrikerate": "Non-Boundary SR",
 }
 
 type statExplorerSQLBuilder struct {
@@ -424,8 +429,9 @@ func buildBattingBowlingQueries(
 	if len(groupByParts) > 0 {
 		groupByClause = "GROUP BY " + strings.Join(groupByParts, ", ")
 	}
-	defaultOrderBy := fmt.Sprintf("ORDER BY %s DESC", strings.ToLower(request.Metrics[0]))
+	defaultOrderBy := fmt.Sprintf("ORDER BY %s DESC NULLS LAST", strings.ToLower(request.Metrics[0]))
 	orderBy := buildStatExplorerOrderByClause(request.Sort, sortColumns, defaultOrderBy)
+	havingClause := buildStatExplorerHavingClause(builder, request.Filters, isBowling)
 
 	statsCTE := ""
 	if isBowling {
@@ -446,7 +452,8 @@ func buildBattingBowlingQueries(
 				COUNT(*) FILTER (WHERE d.player_dismissed IS NOT NULL AND d.wicket_type IN ('caught', 'bowled', 'lbw', 'stumped', 'caught and bowled', 'hit wicket')) AS wickets,
 				COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0) AS balls_bowled,
 				SUM(d.runs_off_bat + d.wides + d.noballs) AS runs_conceded,
-				COUNT(*) FILTER (WHERE d.runs_off_bat = 0 AND d.wides = 0 AND d.noballs = 0) AS dot_balls%s%s
+				COUNT(*) FILTER (WHERE d.runs_off_bat = 0 AND d.wides = 0 AND d.noballs = 0) AS dot_balls,
+				COUNT(*) FILTER (WHERE d.runs_off_bat IN (4, 6)) AS boundaries%s%s
 			FROM wpl_delivery d
 			JOIN wpl_match m ON d.match_id = m.match_id
 			LEFT JOIN wpl_match_info mi ON m.match_id = mi.match_id
@@ -504,8 +511,9 @@ func buildBattingBowlingQueries(
 		FROM stats
 		%s
 		%s
+		%s
 		LIMIT %d OFFSET %d
-	`, withClause, strings.Join(allSelectParts, ",\n"), groupByClause, orderBy, request.Pagination.PageSize, offset)
+	`, withClause, strings.Join(allSelectParts, ",\n"), groupByClause, havingClause, orderBy, request.Pagination.PageSize, offset)
 
 	countSQL := fmt.Sprintf(`
 		%s
@@ -514,8 +522,9 @@ func buildBattingBowlingQueries(
 			SELECT 1
 			FROM stats
 			%s
+			%s
 		) grouped
-	`, withClause, groupByClause)
+	`, withClause, groupByClause, havingClause)
 
 	return statExplorerBuiltQuery{sql: sql, countSQL: countSQL, args: builder.args, metricKeys: metricKeys}, nil
 }
@@ -591,7 +600,7 @@ func buildTeamReportQueries(
 	if len(groupByCols) > 0 {
 		groupByClause = "GROUP BY " + strings.Join(groupByCols, ", ")
 	}
-	defaultOrderBy := fmt.Sprintf("ORDER BY %s DESC", quoteIdentifier(request.Metrics[0]))
+	defaultOrderBy := fmt.Sprintf("ORDER BY %s DESC NULLS LAST", quoteIdentifier(request.Metrics[0]))
 	orderBy := buildStatExplorerOrderByClause(request.Sort, sortColumns, defaultOrderBy)
 	offset := (request.Pagination.Page - 1) * request.Pagination.PageSize
 
@@ -920,6 +929,33 @@ func buildStatExplorerWhereClause(
 	return strings.Join(conditions, " AND ")
 }
 
+func buildStatExplorerHavingClause(builder *statExplorerSQLBuilder, filters models.StatExplorerRunFilters, isBowling bool) string {
+	runsSQL, ballsSQL := "SUM(stats.runs)", "SUM(stats.balls_faced)"
+	if isBowling {
+		runsSQL, ballsSQL = "SUM(stats.runs_conceded)", "SUM(stats.balls_bowled)"
+	}
+
+	conditions := []string{}
+	add := func(expr, op string, value *int) {
+		if value != nil {
+			conditions = append(conditions, fmt.Sprintf("%s %s %s", expr, op, builder.addArg(*value)))
+		}
+	}
+	add(runsSQL, ">=", filters.MinRuns)
+	add(runsSQL, "<=", filters.MaxRuns)
+	add(ballsSQL, ">=", filters.MinBalls)
+	add(ballsSQL, "<=", filters.MaxBalls)
+	if isBowling {
+		add("SUM(stats.wickets)", ">=", filters.MinWickets)
+		add("SUM(stats.wickets)", "<=", filters.MaxWickets)
+	}
+
+	if len(conditions) == 0 {
+		return ""
+	}
+	return "HAVING " + strings.Join(conditions, " AND ")
+}
+
 func buildStatExplorerOrderByClause(sort *models.StatExplorerSort, allowed map[string]string, defaultOrderBy string) string {
 	if sort == nil {
 		return defaultOrderBy
@@ -936,7 +972,7 @@ func buildStatExplorerOrderByClause(sort *models.StatExplorerSort, allowed map[s
 	if strings.EqualFold(sort.Direction, "asc") {
 		direction = "ASC"
 	}
-	return fmt.Sprintf("ORDER BY %s %s", expr, direction)
+	return fmt.Sprintf("ORDER BY %s %s NULLS LAST", expr, direction)
 }
 
 func statExplorerMetricSQL(metric string, isBowling bool) string {
@@ -952,6 +988,8 @@ func statExplorerMetricSQL(metric string, isBowling bool) string {
 			"fourWickets":       "COUNT(*) FILTER (WHERE stats.wickets >= 4 AND stats.wickets < 5)",
 			"fiveWickets":       "COUNT(*) FILTER (WHERE stats.wickets >= 5)",
 			"dotBalls":          "SUM(stats.dot_balls)",
+			"dotBallPct":        "CASE WHEN SUM(stats.balls_bowled) > 0 THEN ROUND((SUM(stats.dot_balls)::numeric / SUM(stats.balls_bowled)) * 100, 2) ELSE 0 END",
+			"boundaryPct":       "CASE WHEN SUM(stats.balls_bowled) > 0 THEN ROUND((SUM(stats.boundaries)::numeric / SUM(stats.balls_bowled)) * 100, 2) ELSE 0 END",
 			"matchesPlayed":     "COUNT(DISTINCT stats.match_id)",
 			"matches":           "COUNT(DISTINCT stats.match_id)",
 		}
@@ -962,21 +1000,26 @@ func statExplorerMetricSQL(metric string, isBowling bool) string {
 	}
 
 	mapValue := map[string]string{
-		"runs":          "SUM(stats.runs)",
-		"ballsFaced":    "SUM(stats.balls_faced)",
-		"innings":       "COUNT(stats.match_id)",
-		"notOuts":       "SUM(1 - stats.is_dismissed)",
-		"highestScore":  "MAX(stats.runs)",
-		"fours":         "SUM(stats.fours)",
-		"sixes":         "SUM(stats.sixes)",
-		"fifties":       "COUNT(*) FILTER (WHERE stats.runs >= 50 AND stats.runs < 100)",
-		"hundreds":      "COUNT(*) FILTER (WHERE stats.runs >= 100)",
-		"strikeRate":    "CASE WHEN SUM(stats.balls_faced) > 0 THEN ROUND((SUM(stats.runs)::numeric / SUM(stats.balls_faced)) * 100, 2) ELSE 0 END",
-		"average":       "CASE WHEN SUM(stats.is_dismissed) > 0 THEN ROUND(SUM(stats.runs)::numeric / SUM(stats.is_dismissed), 2) ELSE SUM(stats.runs)::numeric END",
-		"dismissals":    "SUM(stats.is_dismissed)",
-		"dotBalls":      "SUM(stats.dot_balls)",
-		"matchesPlayed": "COUNT(DISTINCT stats.match_id)",
-		"matches":       "COUNT(DISTINCT stats.match_id)",
+		"runs":                  "SUM(stats.runs)",
+		"ballsFaced":            "SUM(stats.balls_faced)",
+		"innings":               "COUNT(stats.match_id)",
+		"notOuts":               "SUM(1 - stats.is_dismissed)",
+		"highestScore":          "MAX(stats.runs)",
+		"fours":                 "SUM(stats.fours)",
+		"sixes":                 "SUM(stats.sixes)",
+		"fifties":               "COUNT(*) FILTER (WHERE stats.runs >= 50 AND stats.runs < 100)",
+		"hundreds":              "COUNT(*) FILTER (WHERE stats.runs >= 100)",
+		"strikeRate":            "CASE WHEN SUM(stats.balls_faced) > 0 THEN ROUND((SUM(stats.runs)::numeric / SUM(stats.balls_faced)) * 100, 2) ELSE 0 END",
+		"average":               "CASE WHEN SUM(stats.is_dismissed) > 0 THEN ROUND(SUM(stats.runs)::numeric / SUM(stats.is_dismissed), 2) ELSE SUM(stats.runs)::numeric END",
+		"dismissals":            "SUM(stats.is_dismissed)",
+		"dotBalls":              "SUM(stats.dot_balls)",
+		"dotBallPct":            "CASE WHEN SUM(stats.balls_faced) > 0 THEN ROUND((SUM(stats.dot_balls)::numeric / SUM(stats.balls_faced)) * 100, 2) ELSE 0 END",
+		"boundaryPct":           "CASE WHEN SUM(stats.balls_faced) > 0 THEN ROUND(((SUM(stats.fours) + SUM(stats.sixes))::numeric / SUM(stats.balls_faced)) * 100, 2) ELSE 0 END",
+		"ballsPerBoundary":      "ROUND(SUM(stats.balls_faced)::numeric / NULLIF(SUM(stats.fours) + SUM(stats.sixes), 0), 2)",
+		"ballsPerSix":           "ROUND(SUM(stats.balls_faced)::numeric / NULLIF(SUM(stats.sixes), 0), 2)",
+		"nonBoundaryStrikeRate": "ROUND(((SUM(stats.runs) - 4 * SUM(stats.fours) - 6 * SUM(stats.sixes))::numeric / NULLIF(SUM(stats.balls_faced) - SUM(stats.fours) - SUM(stats.sixes), 0)) * 100, 2)",
+		"matchesPlayed":         "COUNT(DISTINCT stats.match_id)",
+		"matches":               "COUNT(DISTINCT stats.match_id)",
 	}
 	if value, ok := mapValue[metric]; ok {
 		return value

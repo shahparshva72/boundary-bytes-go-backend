@@ -149,3 +149,21 @@ func TestNormalizeAndValidateRejectsInvalidBattingPositions(t *testing.T) {
 		t.Fatalf("normalizeAndValidate() error = %v, want %v", err, ErrInvalidBattingPositions)
 	}
 }
+
+func TestValidateMetricsAllowsRateMetricsPerReportType(t *testing.T) {
+	tests := []struct {
+		reportType string
+		metrics    []string
+		want       bool
+	}{
+		{"batting", []string{"boundaryPct", "dotBallPct", "ballsPerBoundary", "ballsPerSix", "nonBoundaryStrikeRate"}, true},
+		{"bowling", []string{"dotBallPct", "boundaryPct"}, true},
+		{"bowling", []string{"ballsPerSix"}, false},
+		{"match", []string{"boundaryPct"}, false},
+	}
+	for _, tt := range tests {
+		if got := ValidateMetrics(tt.reportType, tt.metrics); got != tt.want {
+			t.Errorf("ValidateMetrics(%s, %v) = %v, want %v", tt.reportType, tt.metrics, got, tt.want)
+		}
+	}
+}

@@ -1339,9 +1339,9 @@ func statExplorerAllowedDimensions(reportType string) []string {
 func statExplorerAllowedMetrics(reportType string) []string {
 	switch reportType {
 	case "batting":
-		return []string{"runs", "ballsFaced", "innings", "notOuts", "highestScore", "fours", "sixes", "fifties", "hundreds", "strikeRate", "average", "dismissals", "dotBalls"}
+		return []string{"runs", "ballsFaced", "innings", "notOuts", "highestScore", "fours", "sixes", "fifties", "hundreds", "strikeRate", "average", "dismissals", "dotBalls", "boundaryPct", "dotBallPct", "ballsPerBoundary", "ballsPerSix", "nonBoundaryStrikeRate"}
 	case "bowling":
-		return []string{"wickets", "ballsBowled", "runsConceded", "innings", "economyRate", "bowlingAverage", "bowlingStrikeRate", "fourWickets", "fiveWickets", "dotBalls"}
+		return []string{"wickets", "ballsBowled", "runsConceded", "innings", "economyRate", "bowlingAverage", "bowlingStrikeRate", "fourWickets", "fiveWickets", "dotBalls", "dotBallPct", "boundaryPct"}
 	case "team":
 		return []string{"matchesPlayed", "wins", "losses", "winPct", "winsBattingFirst", "winsBattingSecond"}
 	case "match":
