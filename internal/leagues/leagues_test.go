@@ -19,8 +19,17 @@ func TestDefaultRegistryLoads(t *testing.T) {
 	}
 }
 
+const scopeFixture = `{"leagues": [
+	{"code": "IPL", "name": "Indian Premier League", "gender": "male", "visible": true},
+	{"code": "WPL", "name": "Women's Premier League", "gender": "female", "visible": true},
+	{"code": "BBL", "name": "Big Bash League", "gender": "male", "visible": true},
+	{"code": "WBBL", "name": "Women's Big Bash League", "gender": "female", "visible": true},
+	{"code": "SA20", "name": "SA20", "gender": "male", "visible": true},
+	{"code": "PSL", "name": "Pakistan Super League", "gender": "male", "visible": false}
+]}`
+
 func TestResolveScope(t *testing.T) {
-	r, err := Parse(leaguesJSON, false)
+	r, err := Parse([]byte(scopeFixture), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,8 +75,21 @@ func TestResolveScope(t *testing.T) {
 	}
 }
 
+func TestEveryLeagueIsServed(t *testing.T) {
+	r, err := Parse(leaguesJSON, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(r.VisibleCodes("")); n != 28 {
+		t.Errorf("visible leagues = %d, want 28", n)
+	}
+	if n := len(r.VisibleCodes("male")); n != 19 {
+		t.Errorf("visible men's leagues = %d, want 19", n)
+	}
+}
+
 func TestShowHiddenServesEveryLeague(t *testing.T) {
-	r, err := Parse(leaguesJSON, true)
+	r, err := Parse([]byte(scopeFixture), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,8 +98,8 @@ func TestShowHiddenServesEveryLeague(t *testing.T) {
 	if err != nil || got != "PSL" {
 		t.Fatalf("ResolveScope(PSL) with hidden leagues shown = %q, %v", got, err)
 	}
-	if n := len(r.VisibleCodes("")); n != 28 {
-		t.Errorf("visible leagues = %d, want 28", n)
+	if n := len(r.VisibleCodes("")); n != 6 {
+		t.Errorf("visible leagues = %d, want 6", n)
 	}
 }
 
