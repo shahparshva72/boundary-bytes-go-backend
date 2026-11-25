@@ -18,6 +18,7 @@ type Repository interface {
 	GetBatterBowlersH2H(ctx context.Context, league, batter string) ([]models.MultiMatchupItem, error)
 	GetPlayerCompare(ctx context.Context, league string, players []string, seasons []string, team *string, statType string) ([]models.PlayerComparePlayer, error)
 	GetRunRateTrend(ctx context.Context, league string, team *string) ([]models.RunRateTrendItem, error)
+	GetRunRateTrendByLeague(ctx context.Context, league string) ([]models.RunRateTrendItem, error)
 	GetTeamRunRateProgression(ctx context.Context, league, team, season string) ([]models.TeamRunRateProgressionPoint, models.TeamRunRateProgressionMetadata, error)
 }
 
@@ -126,8 +127,14 @@ func (s *Service) GetPlayerCompare(ctx context.Context, league string, players [
 	}, nil
 }
 
-func (s *Service) GetRunRateTrend(ctx context.Context, league string, team *string) (*RunRateTrendResult, error) {
-	items, err := s.repository.GetRunRateTrend(ctx, league, team)
+func (s *Service) GetRunRateTrend(ctx context.Context, league string, team *string, byLeague bool) (*RunRateTrendResult, error) {
+	var items []models.RunRateTrendItem
+	var err error
+	if byLeague && team == nil {
+		items, err = s.repository.GetRunRateTrendByLeague(ctx, league)
+	} else {
+		items, err = s.repository.GetRunRateTrend(ctx, league, team)
+	}
 	if err != nil {
 		return nil, err
 	}

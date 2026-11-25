@@ -300,7 +300,8 @@ func GetRunRateTrend(service *statsservice.Service) http.HandlerFunc {
 			teamPtr = &team
 		}
 
-		result, err := service.GetRunRateTrend(r.Context(), league, teamPtr)
+		byLeague := r.URL.Query().Get("byLeague") == "true"
+		result, err := service.GetRunRateTrend(r.Context(), league, teamPtr, byLeague)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

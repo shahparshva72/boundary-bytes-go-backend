@@ -39,6 +39,7 @@ type Service interface {
 	GetTeamWins(ctx context.Context, league string) ([]models.TeamWinsItem, error)
 	GetTeamAverages(ctx context.Context, league string) ([]models.TeamAverageItem, error)
 	GetRunRateTrend(ctx context.Context, league string, team *string) ([]models.RunRateTrendItem, error)
+	GetRunRateTrendByLeague(ctx context.Context, league string) ([]models.RunRateTrendItem, error)
 	GetTeamRunRateProgression(ctx context.Context, league, team, season string) ([]models.TeamRunRateProgressionPoint, models.TeamRunRateProgressionMetadata, error)
 	GetPlayerCompare(ctx context.Context, league string, players []string, seasons []string, team *string, statType string) ([]models.PlayerComparePlayer, error)
 	GetStatExplorerOptions(ctx context.Context, league, reportType string) (models.StatExplorerFilterOptions, error)
