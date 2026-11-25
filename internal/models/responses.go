@@ -836,3 +836,46 @@ type MatchDetailResponse struct {
 	Match   MatchDetailInfo `json:"match"`
 	Innings []MatchInnings  `json:"innings"`
 }
+
+type VenueStatsItem struct {
+	Venue            string  `json:"venue"`
+	City             string  `json:"city"`
+	Matches          int     `json:"matches"`
+	AvgFirstInnings  float64 `json:"avgFirstInnings"`
+	AvgSecondInnings float64 `json:"avgSecondInnings"`
+	HighestTotal     int     `json:"highestTotal"`
+	LowestTotal      int     `json:"lowestTotal"`
+	RunRate          float64 `json:"runRate"`
+	Decided          int     `json:"decided"`
+	BatFirstWins     int     `json:"batFirstWins"`
+	ChaseWins        int     `json:"chaseWins"`
+	ChaseWinPct      float64 `json:"chaseWinPct"`
+}
+
+type VenueStatsResponse struct {
+	Data       []VenueStatsItem `json:"data"`
+	Pagination Pagination       `json:"pagination"`
+	League     string           `json:"league"`
+}
+
+type LeagueComparisonItem struct {
+	League           string  `json:"league"`
+	Name             string  `json:"name"`
+	Matches          int     `json:"matches"`
+	AvgFirstInnings  float64 `json:"avgFirstInnings"`
+	RunRate          float64 `json:"runRate"`
+	PowerplayRunRate float64 `json:"powerplayRunRate"`
+	MiddleRunRate    float64 `json:"middleRunRate"`
+	DeathRunRate     float64 `json:"deathRunRate"`
+	BoundaryPct      float64 `json:"boundaryPct"`
+	DotBallPct       float64 `json:"dotBallPct"`
+	BallsPerWicket   float64 `json:"ballsPerWicket"`
+	Decided          int     `json:"decided"`
+	ChaseWinPct      float64 `json:"chaseWinPct"`
+}
+
+type LeagueComparisonResponse struct {
+	Data   []LeagueComparisonItem `json:"data"`
+	League string                 `json:"league"`
+	Since  int                    `json:"since,omitempty"`
+}

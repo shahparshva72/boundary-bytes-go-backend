@@ -12,6 +12,8 @@ type Repository interface {
 	GetBowlingWicketTypes(ctx context.Context, league string, page, limit int) ([]models.BowlingWicketTypesItem, int, error)
 	GetFallOfWickets(ctx context.Context, league string, matchID int) (*models.FallOfWicketsResponse, error)
 	GetMatchDetail(ctx context.Context, league string, matchID int) (*models.MatchDetailResponse, error)
+	GetVenueStats(ctx context.Context, league string, since, minMatches int, sort string, page, limit int) ([]models.VenueStatsItem, int, error)
+	GetLeagueComparison(ctx context.Context, league string, since int) ([]models.LeagueComparisonItem, error)
 	GetMultiMatchup(ctx context.Context, league, player string, opponents []string, mode string) ([]models.MultiMatchupItem, error)
 	GetPlayerProgression(ctx context.Context, league, player string, innings *int) ([]models.PlayerProgressionPoint, models.PlayerProgressionMetadata, error)
 }
@@ -105,6 +107,18 @@ func (s *Service) GetFallOfWickets(ctx context.Context, league string, matchID i
 
 func (s *Service) GetMatchDetail(ctx context.Context, league string, matchID int) (*models.MatchDetailResponse, error) {
 	return s.repository.GetMatchDetail(ctx, league, matchID)
+}
+
+func (s *Service) GetVenueStats(ctx context.Context, league string, since, minMatches int, sort string, page, limit int) ([]models.VenueStatsItem, int, int, error) {
+	items, total, err := s.repository.GetVenueStats(ctx, league, since, minMatches, sort, page, limit)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return items, total, totalPages(total, limit), nil
+}
+
+func (s *Service) GetLeagueComparison(ctx context.Context, league string, since int) ([]models.LeagueComparisonItem, error) {
+	return s.repository.GetLeagueComparison(ctx, league, since)
 }
 
 func (s *Service) availableLeagues(ctx context.Context) []string {
