@@ -158,8 +158,8 @@ func ValidateDimensions(reportType string, dimensions []string) bool {
 
 func ValidateMetrics(reportType string, metrics []string) bool {
 	allowed := map[string]map[string]bool{
-		"batting": {"runs": true, "ballsFaced": true, "innings": true, "notOuts": true, "highestScore": true, "fours": true, "sixes": true, "fifties": true, "hundreds": true, "strikeRate": true, "average": true, "dismissals": true, "dotBalls": true, "boundaryPct": true, "dotBallPct": true, "ballsPerBoundary": true, "ballsPerSix": true, "nonBoundaryStrikeRate": true},
-		"bowling": {"wickets": true, "ballsBowled": true, "runsConceded": true, "innings": true, "economyRate": true, "bowlingAverage": true, "bowlingStrikeRate": true, "fourWickets": true, "fiveWickets": true, "dotBalls": true, "dotBallPct": true, "boundaryPct": true},
+		"batting": {"runs": true, "ballsFaced": true, "innings": true, "notOuts": true, "highestScore": true, "fours": true, "sixes": true, "fifties": true, "hundreds": true, "strikeRate": true, "average": true, "dismissals": true, "dotBalls": true, "boundaryPct": true, "dotBallPct": true, "ballsPerBoundary": true, "ballsPerSix": true, "nonBoundaryStrikeRate": true, "leagueAdjustedStrikeRate": true},
+		"bowling": {"wickets": true, "ballsBowled": true, "runsConceded": true, "innings": true, "economyRate": true, "bowlingAverage": true, "bowlingStrikeRate": true, "fourWickets": true, "fiveWickets": true, "dotBalls": true, "dotBallPct": true, "boundaryPct": true, "leagueAdjustedEconomy": true},
 		"team":    {"matchesPlayed": true, "wins": true, "losses": true, "winPct": true, "winsBattingFirst": true, "winsBattingSecond": true, "matchesBattingFirst": true, "matchesBattingSecond": true, "winPctBattingFirst": true, "winPctBattingSecond": true},
 		"match":   {"matches": true, "runs": true, "wickets": true, "ballsFaced": true, "ballsBowled": true, "economyRate": true, "strikeRate": true},
 	}

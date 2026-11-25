@@ -117,3 +117,45 @@ func TestBuildTeamReportQueriesSplitByBattingOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestLeagueAdjustedMetricsJoinTheBaselineOnlyWhenRequested(t *testing.T) {
+	request := models.StatExplorerRunRequest{
+		ReportType: "batting",
+		Dimensions: []string{"player"},
+		Metrics:    []string{"strikeRate"},
+		Pagination: models.StatExplorerRunPagination{Page: 1, PageSize: 20},
+	}
+	built, err := buildStatExplorerQueries(request, "IPL,PSL")
+	if err != nil {
+		t.Fatalf("buildStatExplorerQueries() error = %v", err)
+	}
+	if strings.Contains(built.sql, "league_baseline") {
+		t.Errorf("baseline joined without an adjusted metric:\n%s", built.sql)
+	}
+
+	request.Metrics = []string{"strikeRate", "leagueAdjustedStrikeRate"}
+	built, err = buildStatExplorerQueries(request, "IPL,PSL")
+	if err != nil {
+		t.Fatalf("buildStatExplorerQueries() error = %v", err)
+	}
+	for _, q := range []string{built.sql, built.countSQL} {
+		for _, want := range []string{"league_baseline AS (", "LEFT JOIN league_baseline lb", "SUM(lb.batting_runs_per_ball) FILTER (WHERE d.wides = 0) AS expected_runs"} {
+			if !strings.Contains(q, want) {
+				t.Errorf("query is missing %q", want)
+			}
+		}
+	}
+	if len(built.args) != 2 {
+		t.Errorf("args = %v, want the league scope twice", built.args)
+	}
+
+	request.ReportType = "bowling"
+	request.Metrics = []string{"leagueAdjustedEconomy"}
+	built, err = buildStatExplorerQueries(request, "IPL")
+	if err != nil {
+		t.Fatalf("buildStatExplorerQueries() error = %v", err)
+	}
+	if !strings.Contains(built.sql, "SUM(lb.bowling_runs_per_ball) FILTER (WHERE d.wides = 0 AND d.noballs = 0) AS expected_runs") {
+		t.Errorf("bowling baseline missing:\n%s", built.sql)
+	}
+}
