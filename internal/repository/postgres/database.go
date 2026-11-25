@@ -28,6 +28,7 @@ type Service interface {
 	GetPlayerRecentForm(ctx context.Context, league, player string, limit int) (models.PlayerRecentForm, error)
 	GetPlayerInningsSplits(ctx context.Context, league, player string) (models.PlayerInningsSplits, error)
 	GetPlayerCareer(ctx context.Context, league, player string) (models.PlayerCareer, error)
+	GetMatchDetail(ctx context.Context, league string, matchID int) (*models.MatchDetailResponse, error)
 	GetLeagueConfigStats(ctx context.Context) ([]models.LeagueConfigItem, error)
 	GetSeasonsByLeague(ctx context.Context, league string) ([]string, error)
 	GetLatestMatchDate(ctx context.Context, league string) (*time.Time, error)
