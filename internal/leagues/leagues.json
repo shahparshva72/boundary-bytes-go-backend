@@ -55,7 +55,7 @@
       "gender": "male",
       "source": "psl_csv2",
       "events": ["Pakistan Super League"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "CPL",
@@ -63,7 +63,7 @@
       "gender": "male",
       "source": "cpl_csv2",
       "events": ["Caribbean Premier League"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "BPL",
@@ -71,7 +71,7 @@
       "gender": "male",
       "source": "bpl_csv2",
       "events": ["Bangladesh Premier League"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "LPL",
@@ -79,7 +79,7 @@
       "gender": "male",
       "source": "lpl_csv2",
       "events": ["Lanka Premier League"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "ILT20",
@@ -90,7 +90,7 @@
       "teamRenames": {
         "Sharjah Warriors": "Sharjah Warriorz"
       },
-      "visible": false
+      "visible": true
     },
     {
       "code": "MLC",
@@ -98,7 +98,7 @@
       "gender": "male",
       "source": "mlc_csv2",
       "events": ["Major League Cricket"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "NPL",
@@ -109,7 +109,7 @@
       "teamRenames": {
         "Kathmandu Gurkhas": "Kathmandu Gorkhas"
       },
-      "visible": false
+      "visible": true
     },
     {
       "code": "NTB",
@@ -117,7 +117,7 @@
       "gender": "male",
       "source": "ntb_csv2",
       "events": ["NatWest T20 Blast", "Vitality Blast", "Vitality Blast Men"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "SMA",
@@ -125,7 +125,7 @@
       "gender": "male",
       "source": "sma_csv2",
       "events": ["Syed Mushtaq Ali Trophy"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "SSM",
@@ -133,7 +133,7 @@
       "gender": "male",
       "source": "ssm_csv2",
       "events": ["Super Smash", "HRV Twenty20", "HRV Cup"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "WSSM",
@@ -141,7 +141,7 @@
       "gender": "female",
       "source": "ssm_csv2",
       "events": ["Women's Super Smash", "New Zealand Cricket Women's Twenty20"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "CTC",
@@ -149,7 +149,7 @@
       "gender": "male",
       "source": "ctc_csv2",
       "events": ["CSA T20 Challenge", "Ram Slam T20 Challenge", "MiWAY T20 Challenge"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "HND",
@@ -158,7 +158,7 @@
       "source": "hnd_csv2",
       "events": ["The Hundred Men's Competition"],
       "ballsPerOver": 5,
-      "visible": false
+      "visible": true
     },
     {
       "code": "WHND",
@@ -167,7 +167,7 @@
       "source": "hnd_csv2",
       "events": ["The Hundred Women's Competition"],
       "ballsPerOver": 5,
-      "visible": false
+      "visible": true
     },
     {
       "code": "MSL",
@@ -175,7 +175,7 @@
       "gender": "male",
       "source": "msl_csv2",
       "events": ["Mzansi Super League"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "IPT",
@@ -183,7 +183,7 @@
       "gender": "male",
       "source": "ipt_csv2",
       "events": ["Cricket Ireland Inter-Provincial Twenty20 Trophy"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "ETPL",
@@ -191,7 +191,7 @@
       "gender": "male",
       "source": "etpl_csv2",
       "events": ["European T20 Premier League"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "MCT",
@@ -199,7 +199,7 @@
       "gender": "male",
       "source": "mct_csv2",
       "events": ["Major Clubs T20 Tournament"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "WCL",
@@ -207,7 +207,7 @@
       "gender": "female",
       "source": "wcl_csv2",
       "events": ["Women's Caribbean Premier League"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "WTB",
@@ -215,7 +215,7 @@
       "gender": "female",
       "source": "wtb_csv2",
       "events": ["Vitality Blast Women"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "CEC",
@@ -223,7 +223,7 @@
       "gender": "female",
       "source": "cec_csv2",
       "events": ["Charlotte Edwards Cup"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "WSL",
@@ -231,7 +231,7 @@
       "gender": "female",
       "source": "wsl_csv2",
       "events": ["Women's Cricket Super League"],
-      "visible": false
+      "visible": true
     },
     {
       "code": "WTC",
@@ -239,7 +239,7 @@
       "gender": "female",
       "source": "wtc_csv2",
       "events": ["Women's T20 Challenge", "Women's T20 Challenge Match"],
-      "visible": false
+      "visible": true
     }
   ]
 }
