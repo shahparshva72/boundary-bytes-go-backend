@@ -22,6 +22,8 @@ type PlayerProfileResponse struct {
 	Name        string                     `json:"name"`
 	Bio         *PlayerProfileBio          `json:"bio,omitempty"`
 	LeagueStats []PlayerProfileLeagueStats `json:"leagueStats"`
+	RecentForm    PlayerRecentForm           `json:"recentForm"`
+	InningsSplits PlayerInningsSplits        `json:"inningsSplits"`
 	Metadata    PlayerProfileMetadata      `json:"metadata"`
 }
 
@@ -38,6 +40,60 @@ type PlayerProfileLeagueStats struct {
 	League  string                `json:"league"`
 	Batting *PlayerCompareBatting `json:"batting,omitempty"`
 	Bowling *PlayerCompareBowling `json:"bowling,omitempty"`
+}
+
+type PlayerFormBatting struct {
+	MatchID    int     `json:"matchId"`
+	Date       string  `json:"date"`
+	League     string  `json:"league"`
+	Opposition string  `json:"opposition"`
+	Runs       int     `json:"runs"`
+	Balls      int     `json:"balls"`
+	Fours      int     `json:"fours"`
+	Sixes      int     `json:"sixes"`
+	StrikeRate float64 `json:"strikeRate"`
+	NotOut     bool    `json:"notOut"`
+}
+
+type PlayerFormBowling struct {
+	MatchID      int     `json:"matchId"`
+	Date         string  `json:"date"`
+	League       string  `json:"league"`
+	Opposition   string  `json:"opposition"`
+	Overs        float64 `json:"overs"`
+	RunsConceded int     `json:"runsConceded"`
+	Wickets      int     `json:"wickets"`
+	DotBalls     int     `json:"dotBalls"`
+}
+
+type PlayerRecentForm struct {
+	Batting []PlayerFormBatting `json:"batting"`
+	Bowling []PlayerFormBowling `json:"bowling"`
+}
+
+type PlayerBattingSplit struct {
+	Innings    int     `json:"innings"`
+	Played     int     `json:"played"`
+	Runs       int     `json:"runs"`
+	Balls      int     `json:"balls"`
+	Dismissals int     `json:"dismissals"`
+	Average    float64 `json:"average"`
+	StrikeRate float64 `json:"strikeRate"`
+}
+
+type PlayerBowlingSplit struct {
+	Innings      int     `json:"innings"`
+	Played       int     `json:"played"`
+	Balls        int     `json:"balls"`
+	RunsConceded int     `json:"runsConceded"`
+	Wickets      int     `json:"wickets"`
+	Economy      float64 `json:"economy"`
+	Average      float64 `json:"average"`
+}
+
+type PlayerInningsSplits struct {
+	Batting []PlayerBattingSplit `json:"batting"`
+	Bowling []PlayerBowlingSplit `json:"bowling"`
 }
 
 type PlayerProfileMetadata struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/shahparshva72/boundary-bytes-go-backend/internal/models"
@@ -18,6 +19,8 @@ type Repository interface {
 	GetPlayerBySlug(ctx context.Context, slug string) (string, []string, error)
 	ListPlayerSlugs(ctx context.Context, limit, offset int) ([]models.PlayerSlugEntry, int, error)
 	GetPlayerStyleByName(ctx context.Context, playerName string) (*models.PlayerProfileBio, error)
+	GetPlayerRecentForm(ctx context.Context, league, player string, limit int) (models.PlayerRecentForm, error)
+	GetPlayerInningsSplits(ctx context.Context, league, player string) (models.PlayerInningsSplits, error)
 }
 
 type StatsService interface {
@@ -35,14 +38,18 @@ type ListResult struct {
 }
 
 type PlayerProfileResult struct {
-	Slug        string
-	Name        string
-	Bio         *models.PlayerProfileBio
-	LeagueStats []models.PlayerProfileLeagueStats
-	Leagues     []string
+	Slug          string
+	Name          string
+	Bio           *models.PlayerProfileBio
+	LeagueStats   []models.PlayerProfileLeagueStats
+	RecentForm    models.PlayerRecentForm
+	InningsSplits models.PlayerInningsSplits
+	Leagues       []string
 }
 
 var ErrNotFound = errors.New("player not found")
+
+const recentFormInnings = 10
 
 func New(repository Repository, stats StatsService) *Service {
 	return &Service{repository: repository, stats: stats}
@@ -115,6 +122,20 @@ func (s *Service) GetPlayerProfile(ctx context.Context, slug string) (*PlayerPro
 		})
 	}
 
+	var recentForm models.PlayerRecentForm
+	var inningsSplits models.PlayerInningsSplits
+	leagueScope := strings.Join(leagues, ",")
+	eg.Go(func() error {
+		var err error
+		recentForm, err = s.repository.GetPlayerRecentForm(ctx, leagueScope, playerName, recentFormInnings)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		inningsSplits, err = s.repository.GetPlayerInningsSplits(ctx, leagueScope, playerName)
+		return err
+	})
+
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
@@ -127,11 +148,13 @@ func (s *Service) GetPlayerProfile(ctx context.Context, slug string) (*PlayerPro
 	sortLeagueStats(leagueStatsMu, leagueOrder)
 
 	return &PlayerProfileResult{
-		Slug:        slug,
-		Name:        playerName,
-		Bio:         bio,
-		LeagueStats: leagueStatsMu,
-		Leagues:     s.availableLeagues(ctx),
+		Slug:          slug,
+		Name:          playerName,
+		Bio:           bio,
+		LeagueStats:   leagueStatsMu,
+		RecentForm:    recentForm,
+		InningsSplits: inningsSplits,
+		Leagues:       s.availableLeagues(ctx),
 	}, nil
 }
 
