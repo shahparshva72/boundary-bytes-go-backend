@@ -258,22 +258,9 @@ func buildBattingBowlingQueries(
 	}
 
 	needsLeagueBaseline := containsString(request.Metrics, "leagueAdjustedStrikeRate") || containsString(request.Metrics, "leagueAdjustedEconomy")
-	leagueBaselineCTE, leagueBaselineJoinSQL, expectedRunsSelectSQL := "", "", ""
+	leagueBaselineJoinSQL, expectedRunsSelectSQL := "", ""
 	if needsLeagueBaseline {
-		leagueBaselineCTE = fmt.Sprintf(`league_baseline AS (
-			SELECT
-				m.league,
-				m.season,
-				%s AS phase,
-				SUM(d.runs_off_bat)::numeric / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0), 0) AS batting_runs_per_ball,
-				SUM(d.runs_off_bat + d.wides + d.noballs)::numeric / NULLIF(COUNT(*) FILTER (WHERE d.wides = 0 AND d.noballs = 0), 0) AS bowling_runs_per_ball
-			FROM wpl_delivery d
-			JOIN wpl_match m ON d.match_id = m.match_id
-			%s
-			WHERE m.league = ANY(string_to_array(%s, ',')) AND d.innings <= 2
-			GROUP BY m.league, m.season, %s
-		)`, phaseSQL(), matchInfoJoinSQL, builder.addArg(league), phaseSQL())
-		leagueBaselineJoinSQL = fmt.Sprintf("LEFT JOIN league_baseline lb ON lb.league = m.league AND lb.season = m.season AND lb.phase = %s", phaseSQL())
+		leagueBaselineJoinSQL = fmt.Sprintf("LEFT JOIN league_phase_baseline lb ON lb.league = m.league AND lb.season = m.season AND lb.phase = %s", phaseSQL())
 		if isBowling {
 			expectedRunsSelectSQL = `,
 				SUM(lb.bowling_runs_per_ball) FILTER (WHERE d.wides = 0 AND d.noballs = 0) AS expected_runs`
@@ -534,9 +521,6 @@ func buildBattingBowlingQueries(
 	ctes := []string{}
 	if playerStyleLookupCTE != "" {
 		ctes = append(ctes, playerStyleLookupCTE)
-	}
-	if leagueBaselineCTE != "" {
-		ctes = append(ctes, leagueBaselineCTE)
 	}
 	ctes = append(ctes, statsCTE)
 	withClause := "WITH " + strings.Join(ctes, ",\n")
