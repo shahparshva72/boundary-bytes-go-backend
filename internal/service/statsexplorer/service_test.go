@@ -159,6 +159,7 @@ func TestValidateMetricsAllowsRateMetricsPerReportType(t *testing.T) {
 		{"batting", []string{"boundaryPct", "dotBallPct", "ballsPerBoundary", "ballsPerSix", "nonBoundaryStrikeRate"}, true},
 		{"bowling", []string{"dotBallPct", "boundaryPct"}, true},
 		{"bowling", []string{"ballsPerSix"}, false},
+		{"team", []string{"matchesBattingFirst", "matchesBattingSecond", "winPctBattingFirst", "winPctBattingSecond"}, true},
 		{"match", []string{"boundaryPct"}, false},
 	}
 	for _, tt := range tests {

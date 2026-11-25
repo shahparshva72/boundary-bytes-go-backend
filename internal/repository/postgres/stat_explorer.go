@@ -67,6 +67,10 @@ var statExplorerMetricLabels = map[string]string{
 	"ballsperboundary":      "Balls / Boundary",
 	"ballspersix":           "Balls / Six",
 	"nonboundarystrikerate": "Non-Boundary SR",
+	"matchesbattingfirst":   "Batting 1st Matches",
+	"matchesbattingsecond":  "Batting 2nd Matches",
+	"winpctbattingfirst":    "Batting 1st Win %",
+	"winpctbattingsecond":   "Batting 2nd Win %",
 }
 
 type statExplorerSQLBuilder struct {
@@ -583,12 +587,16 @@ func buildTeamReportQueries(
 
 	metricKeys := map[string]bool{}
 	metricExpressions := map[string]string{
-		"matchesPlayed":     `COUNT(DISTINCT t.match_id)`,
-		"wins":              `COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner)`,
-		"losses":            `COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team != w.winner AND w.winner IS NOT NULL)`,
-		"winPct":            `CASE WHEN COUNT(DISTINCT t.match_id) FILTER (WHERE w.winner IS NOT NULL) > 0 THEN ROUND((COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner)::numeric / COUNT(DISTINCT t.match_id) FILTER (WHERE w.winner IS NOT NULL)) * 100, 2) ELSE 0 END`,
-		"winsBattingFirst":  `COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner AND w.win_type = 'batting_first')`,
-		"winsBattingSecond": `COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner AND w.win_type = 'batting_second')`,
+		"matchesPlayed":        `COUNT(DISTINCT t.match_id)`,
+		"wins":                 `COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner)`,
+		"losses":               `COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team != w.winner AND w.winner IS NOT NULL)`,
+		"winPct":               `CASE WHEN COUNT(DISTINCT t.match_id) FILTER (WHERE w.winner IS NOT NULL) > 0 THEN ROUND((COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner)::numeric / COUNT(DISTINCT t.match_id) FILTER (WHERE w.winner IS NOT NULL)) * 100, 2) ELSE 0 END`,
+		"winsBattingFirst":     `COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner AND w.win_type = 'batting_first')`,
+		"winsBattingSecond":    `COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner AND w.win_type = 'batting_second')`,
+		"matchesBattingFirst":  `COUNT(DISTINCT t.match_id) FILTER (WHERE t.bat_order = 1)`,
+		"matchesBattingSecond": `COUNT(DISTINCT t.match_id) FILTER (WHERE t.bat_order = 2)`,
+		"winPctBattingFirst":   `ROUND((COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner AND w.win_type = 'batting_first')::numeric / NULLIF(COUNT(DISTINCT t.match_id) FILTER (WHERE t.bat_order = 1), 0)) * 100, 2)`,
+		"winPctBattingSecond":  `ROUND((COUNT(DISTINCT t.match_id) FILTER (WHERE t.std_team = w.winner AND w.win_type = 'batting_second')::numeric / NULLIF(COUNT(DISTINCT t.match_id) FILTER (WHERE t.bat_order = 2), 0)) * 100, 2)`,
 	}
 	for _, metric := range request.Metrics {
 		selectCols = append(selectCols, fmt.Sprintf(`%s AS %s`, metricExpressions[metric], quoteIdentifier(metric)))
@@ -630,9 +638,9 @@ func buildTeamReportQueries(
 			FROM match_totals
 		),
 		teams AS (
-			SELECT match_id, team1 AS std_team FROM match_totals
+			SELECT match_id, team1 AS std_team, 1 AS bat_order FROM match_totals
 			UNION ALL
-			SELECT match_id, team2 AS std_team FROM match_totals
+			SELECT match_id, team2 AS std_team, 2 AS bat_order FROM match_totals
 		)
 		SELECT %s
 		FROM teams t
