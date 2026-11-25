@@ -10,21 +10,21 @@ import (
 )
 
 type fakeRepository struct {
-	leagues         []string
-	batters         []string
-	bowlers         []string
-	battersErr      error
-	slugName        string
-	slugLeagues     []string
-	slugErr         error
-	style           *models.PlayerProfileBio
-	styleErr        error
-	listEntries     []models.PlayerSlugEntry
-	listTotal       int
-	listErr         error
-	recentForm      models.PlayerRecentForm
-	recentFormErr   error
-	inningsSplits   models.PlayerInningsSplits
+	leagues       []string
+	batters       []string
+	bowlers       []string
+	battersErr    error
+	slugName      string
+	slugLeagues   []string
+	slugErr       error
+	style         *models.PlayerProfileBio
+	styleErr      error
+	listEntries   []models.PlayerSlugEntry
+	listTotal     int
+	listErr       error
+	recentForm    models.PlayerRecentForm
+	recentFormErr error
+	inningsSplits models.PlayerInningsSplits
 }
 
 func (r fakeRepository) GetAllLeagues(ctx context.Context) ([]string, error) {
@@ -53,6 +53,10 @@ func (r fakeRepository) GetPlayerStyleByName(ctx context.Context, playerName str
 
 func (r fakeRepository) GetPlayerRecentForm(ctx context.Context, league, player string, limit int) (models.PlayerRecentForm, error) {
 	return r.recentForm, r.recentFormErr
+}
+
+func (r fakeRepository) GetPlayerCareer(ctx context.Context, league, player string) (models.PlayerCareer, error) {
+	return models.PlayerCareer{}, nil
 }
 
 func (r fakeRepository) GetPlayerInningsSplits(ctx context.Context, league, player string) (models.PlayerInningsSplits, error) {

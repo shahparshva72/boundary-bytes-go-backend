@@ -22,6 +22,7 @@ type PlayerProfileResponse struct {
 	Name        string                     `json:"name"`
 	Bio         *PlayerProfileBio          `json:"bio,omitempty"`
 	LeagueStats []PlayerProfileLeagueStats `json:"leagueStats"`
+	Career        PlayerCareer               `json:"career"`
 	RecentForm    PlayerRecentForm           `json:"recentForm"`
 	InningsSplits PlayerInningsSplits        `json:"inningsSplits"`
 	Metadata    PlayerProfileMetadata      `json:"metadata"`
@@ -723,4 +724,16 @@ type FallOfWicketsEntry struct {
 type FallOfWicketsMetadata struct {
 	AvailableLeagues []string `json:"availableLeagues"`
 	TotalWickets     int      `json:"totalWickets"`
+}
+
+type PlayerCareerRow struct {
+	League  string                `json:"league"`
+	Season  string                `json:"season"`
+	Batting *PlayerCompareBatting `json:"batting,omitempty"`
+	Bowling *PlayerCompareBowling `json:"bowling,omitempty"`
+}
+
+type PlayerCareer struct {
+	Seasons []PlayerCareerRow `json:"seasons"`
+	Total   *PlayerCareerRow  `json:"total,omitempty"`
 }
